@@ -1,0 +1,52 @@
+#!/usr/bin/python
+"""
+    A small tool to check OpenFOAM log files for simulation progress
+    and save points
+
+    Usage:
+        timeleft.py [options]
+
+    Options:
+        -h --help           Show this screen
+        -v --verbose        Print current log
+        -m --multi          Display cases in subfolders
+        --log=file          Use specific logfile
+"""
+
+from docopt import docopt
+from colorama import Fore, Back, Style
+# from datetime import datetime, timedelta
+import datetime
+import glob
+import os
+import re
+import time
+from FoamMon import *
+
+def timedelta(seconds):
+    return datetime.timedelta(seconds=int(max(0, seconds)))
+
+
+def get_key_header(key):
+    """ check header for given key """
+    for line in CACHE_HEADER:
+        if key in line:
+            delim = line.find(':')
+            return line[delim+2:-1]
+
+
+
+def get_log_name(log="*log*"):
+    return max(glob.iglob(log), key=os.path.getctime)
+
+
+if __name__ == '__main__':
+
+    arguments = docopt(__doc__, version='0.1')
+    if arguments['--multi']:
+        cases = Cases(os.getcwd())
+        cases.print_status()
+
+    else:
+        case = Case(os.getcwd())
+        case.print_status_full()
