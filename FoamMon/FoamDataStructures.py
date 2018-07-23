@@ -6,6 +6,9 @@ import glob
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
+from collections import defaultdict
+from copy import deepcopy
 
 LEN_CACHE = 10000 # max lines of log header
 LEN_CACHE_BYTES = 30*1024 # max lines of log header
@@ -15,16 +18,56 @@ CACHE_TAIL = None
 def timedelta(seconds):
     return datetime.timedelta(seconds=int(max(0, seconds)))
 
+foamMonHeader = """
+8 8888888888       ,o888888o.           .8.                   ,8.       ,8.                   ,8.       ,8.           ,o888888o.     b.             8
+8 8888          . 8888     `88.        .888.                 ,888.     ,888.                 ,888.     ,888.       . 8888     `88.   888o.          8
+8 8888         ,8 8888       `8b      :88888.               .`8888.   .`8888.               .`8888.   .`8888.     ,8 8888       `8b  Y88888o.       8
+8 8888         88 8888        `8b    . `88888.             ,8.`8888. ,8.`8888.             ,8.`8888. ,8.`8888.    88 8888        `8b .`Y888888o.    8
+8 888888888888 88 8888         88   .8. `88888.           ,8'8.`8888,8^8.`8888.           ,8'8.`8888,8^8.`8888.   88 8888         88 8o. `Y888888o. 8
+8 8888         88 8888         88  .8`8. `88888.         ,8' `8.`8888' `8.`8888.         ,8' `8.`8888' `8.`8888.  88 8888         88 8`Y8o. `Y88888o8
+8 8888         88 8888        ,8P .8' `8. `88888.       ,8'   `8.`88'   `8.`8888.       ,8'   `8.`88'   `8.`8888. 88 8888        ,8P 8   `Y8o. `Y8888
+8 8888         `8 8888       ,8P .8'   `8. `88888.     ,8'     `8.`'     `8.`8888.     ,8'     `8.`'     `8.`8888.`8 8888       ,8P  8      `Y8o. `Y8
+8 8888          ` 8888     ,88' .888888888. `88888.   ,8'       `8        `8.`8888.   ,8'       `8        `8.`8888.` 8888     ,88'   8         `Y8o.`
+8 8888             `8888888P'  .8'       `8. `88888. ,8'         `         `8.`8888. ,8'         `         `8.`8888.  `8888888P'     8            `Yo
+                                                                                                              by Gregor Olenik, go@hpsim.de, hpsim.de
+"""
+
+class ColoredProgressBar():
+
+
+    events = []
+
+    def __init__(self, size, progress=0):
+        self.size = size
+        self.done_char = Fore.GREEN + "█" + Style.RESET_ALL
+        self.undone_char = Fore.BLUE + "█" + Style.RESET_ALL
+        self.digits = [self.done_char
+                for _ in range(int(progress*size))]
+        self.digits.extend([self.undone_char
+                for _ in range(size - int(progress*size))])
+
+
+    def add_event(self, percentage, color):
+        index = int(percentage*self.size)
+        self.digits[index] = color + "█" + Style.RESET_ALL
+
+    def draw(self):
+        return "".join(self.digits)
+
+
 class Cases():
 
     def __init__(self, path):
         self.path = path
         os.system("clear")
-        print("Collecting Data")
-        self.cases = self.find_cases()
+        print("Searching Logfiles")
+        self.cases = defaultdict(list)
+        p = ThreadPoolExecutor(1)
+        p.submit(self.find_cases)
         while True:
             case_stats = {}
-            for r, cs in self.cases.items():
+            cases = deepcopy(self.cases)
+            for r, cs in cases.items():
                 for c in cs:
                     if (c.log.active):
                         c.log.refresh()
@@ -34,46 +77,82 @@ class Cases():
                         if (c.print_status_short() and not c.log.active)]
                         }
 
+            lengths = self.get_max_lengths(case_stats)
 
             os.system("clear")
-            self.print_header()
+            print(foamMonHeader)
+            # print(self.cases)
+            self.print_header(lengths)
             # print(self.cases)
             for r, cs in case_stats.items():
-                print(os.path.basename(r))
+                print("subfolder: " + os.path.basename(r))
                 for c in cs["active"]:
-                        print(c)
+                        print(c.to_str(lengths))
                 for c in cs["inactive"]:
-                        print(c)
+                        print(c.to_str(lengths))
             self.print_legend()
             time.sleep(0.2)
 
-    def find_cases(self):
-        cases = {}
-        top = self.path
-        for r, dirs, _ in os.walk(self.path):
-            dirs[:] = [d for d in dirs
-                    if "processor" not in d
-                    and "constant" not in d
-                    and "postProcessing" not in d]
-            level = r.count(os.sep) - top.count(os.sep)
-            if level > 2:
-                 continue
-            # print(r)
-            cases[r] = [Case(os.path.join(r, x)) for x in dirs]
-        ret =  {r: [c for c in cs if c.is_valid]
-                for r, cs in cases.items() if cs}
-        return {r: c for r, c in ret.items() if c}
+    def get_max_lengths(self, statuses):
+        lengths = [0 for _ in range(6)]
+        for n, folder in statuses.items():
+            for s in folder.get("active", []):
+                for i in range(len(lengths)):
+                    lengths[i] = max(lengths[i], s.lengths[i])
 
-    def print_header(self):
-        width_progress = 50
-        width_folder =  25
-        width_log =  10
-        width_time =  10
-        width_next_write =  16
-        width_finishes =  16
-        s = "{: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|\
-                {: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}".format(
-                "Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
+            for s in folder.get("inactive", []):
+                for i in range(len(lengths)):
+                    lengths[i] = max(lengths[i], s.lengths[i])
+        return lengths
+
+    def find_cases(self):
+        import sys
+        while True:
+            exc_info = sys.exc_info()
+            try:
+                top = self.path
+                for r, dirs, _ in os.walk(self.path):
+                    dirs[:] = [d for d in dirs
+                            if "processor" not in d
+                            and "constant" not in d
+                            and "lagrangian" not in d
+                            and "postProcessing" not in d
+                            and "dynamicCode" not in d
+                            and "system" not in d
+                            ]
+                    level = r.count(os.sep) - top.count(os.sep)
+                    # if level > 2:
+                    #      continue
+                    for d in dirs:
+                        try:
+                            c = Case(os.path.join(r, d))
+                            subfold = r.split("/")[-1]
+                            if c.is_valid:
+                                exists = False
+                                for existing in self.cases[subfold]:
+                                    if c.path == existing.path:
+                                        exists  = True
+                                if not exists:
+                                    self.cases[subfold].append(c)
+                        except Exception as e:
+                            pass
+                            # print("innner", e, r)
+            except Exception as e:
+                pass
+                import traceback
+                print(traceback.print_exception(*exc_info))
+                print(e, r)
+
+    def print_header(self, lengths):
+        width_progress = lengths[0]
+        width_folder =  lengths[1] + 2
+        width_log =  lengths[2] + 2
+        width_time =  lengths[3] + 2
+        width_next_write =  max(12, lengths[4] + 2)
+        width_finishes =  lengths[5] + 2
+        s = "{: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
+        s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
+        s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
                 width_progress=width_progress,
                 width_folder=width_folder,
                 width_log=width_log,
@@ -84,10 +163,10 @@ class Cases():
         print(s)
 
     def print_legend(self):
-        s = "\nLegend:\n\n"
-        s += Fore.GREEN + "█" + Style.RESET_ALL + " Progress\n"
-        s += Fore.YELLOW + "█"  + Style.RESET_ALL + " Start Sampling\n"
-        s += Style.BRIGHT + "Active"  + Style.RESET_ALL  + "\n"
+        s = "\nLegend: "
+        s += Fore.GREEN + "█" + Style.RESET_ALL + " Progress "
+        s += Fore.YELLOW + "█"  + Style.RESET_ALL + " Start Sampling "
+        s += Style.BRIGHT + "Active"  + Style.RESET_ALL  + " "
         s += Style.DIM + "Inactive"  + Style.RESET_ALL + "\n"
         print(s)
 
@@ -114,6 +193,7 @@ class Case():
 
     @property
     def is_valid(self):
+        # print("check if valid", self.path)
         return self.has_controlDict and self.log.is_valid
 
 
@@ -127,21 +207,9 @@ class Case():
         return ctDct
 
     def status_bar(self, digits=100):
-        prog_perc = int(self.log.progress(self.endTime)*digits)
-        bar = (
-                Fore.GREEN
-                + "█" * prog_perc
-                + Fore.RED
-                # + "░" * (digits - prog_perc)
-                + "█" * (digits - prog_perc)
-                + Style.RESET_ALL
-                )
-        bar = list(bar)
-        # FIXME
-        # s = bar[int(self.startSamplingPerc*digits)]
-        # cur_col = Fore.GREEN if self.started_sampling else Fore.RED
-        # bar[int(self.startSamplingPerc*digits)] = Fore.YELLOW + s + cur_col
-        return "".join(bar)
+        bar = ColoredProgressBar(digits, self.log.progress(self.endTime))
+        bar.add_event(self.startSamplingPerc, Fore.YELLOW)
+        return bar.draw()
 
 
     def find_logs(self):
@@ -164,6 +232,16 @@ class Case():
             r, ds, _ = next(os.walk(proc_dir))
             ds = [float(d) for d in ds if "constant" not in d]
             return max(ds)
+        else:
+            ts = []
+            r, ds, _ = next(os.walk(self.path))
+            for t in ds:
+                try:
+                    tsf = float(t)
+                    ts.append(tsf)
+                except:
+                    pass
+            return max(ts)
 
     def find_recent_log_fn(self):
         try:
@@ -218,22 +296,23 @@ class Case():
         import sys
         try:
             exc_info = sys.exc_info()
-            return "{}{}{: ^25}|{: ^25}| {} |  {} | {} {}".format(
+            return Status(
                     self.status_bar(digits=50),
-                    Style.BRIGHT if self.log.active else Style.DIM,
+                    # Style.BRIGHT if self.log.active else Style.DIM,
+                    50,
+                    self.log.active,
                     self.basename,
                     os.path.basename(self.log.path),
                     self.log.sim_time,
                     timedelta(self.log.time_till_writeout()),
                     timedelta(self.log.timeleft()),
-                    Style.RESET_ALL
+                    # Style.RESET_ALL
                     )
         except Exception as e:
             import traceback
+            print(e, self.path)
             print(traceback.print_exception(*exc_info))
-            print(e)
             return False
-
 
     def print_status_full(self):
         while True:
@@ -259,6 +338,46 @@ class Case():
             os.system("clear")
 
 
+class Status():
+
+    def __init__(self, bar, digits, active, base, name, time, wo, tl):
+        self.bar = str(bar)
+        self.digits = digits
+        self.active = active
+        self.base = base
+        self.name = name
+        self.time = str(time)
+        self.wo = str(wo)
+        self.tl = str(tl)
+
+    @property
+    def lengths(self):
+        return [self.digits, len(self.base), len(self.name),
+                len(self.time), len(self.wo), len(self.tl)]
+
+    def to_str(self, lengths):
+        width_progress = lengths[0] + 2
+        width_folder =  lengths[1] + 2
+        width_log =  lengths[2] + 2
+        width_time =  lengths[3] + 2
+        width_next_write =  max(12, lengths[4] + 2)
+        width_finishes =  lengths[5] + 2
+        style = Style.BRIGHT if self.active else Style.DIM
+        s = "{: ^{width_progress}}|"
+        s += style +  "{: ^{width_folder}}|{: ^{width_log}}|"
+        s += "{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
+        s += Style.RESET_ALL
+        s = s.format(
+                self.bar, self.base, self.name, self.time, self.wo, self.tl,
+                width_progress=width_progress,
+                width_folder=width_folder,
+                width_log=width_log,
+                width_time=width_time,
+                width_next_write=width_next_write,
+                width_finishes=width_finishes,
+                )
+        return s
+
 
 class Log():
 
@@ -274,13 +393,19 @@ class Log():
 
     @property
     def is_valid(self):
+        # TODO Fails on decompose logs
+        if (self.Exec == "decomposePar") or (self.Exec == "blockMesh") or (self.Exec == "mapFields"):
+            return False
         try:
             self.get_SimTime(self.cached_body)
             return True
         except Exception as e:
-            print("Invalid Log", e)
+            # print("Invalid Log", e)
             return False
 
+    @property
+    def Exec(self):
+        return self.get_Exec(self.cached_header)
 
     @property
     def getctime(self):
@@ -317,13 +442,10 @@ class Log():
 
     def get_SimTime(self, chunk):
         return float(re.findall("\nTime = ([0-9.e\-]*)", chunk)[-1])
-        # for line in cache:
-        #     if time == 'sim':
-        #         if 'Time =' in line and not 'Clock' in line:
-        #             return str_to_float(line)[0]
-        #     else:
-        #         if 'ClockTime =' in line:
-        #             return str_to_float(line)[2]
+
+    def get_Exec(self, chunk):
+        return re.findall("Exec   : ([0-9A-Za-z]*)", chunk)[0]
+
 
     def print_log_body(self):
         sep_width = 120
@@ -331,7 +453,6 @@ class Log():
         print("="*sep_width)
         body_str = ("".join(self.cached_body.split("\n")[-30:-1]))
         print(body_str)
-        #print("="*sep_width)
 
     @property
     def start_time(self):
