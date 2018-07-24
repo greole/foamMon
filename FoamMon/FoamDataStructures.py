@@ -11,7 +11,7 @@ from collections import defaultdict
 from copy import deepcopy
 
 LEN_CACHE = 10000 # max lines of log header
-LEN_CACHE_BYTES = 30*1024 # max lines of log header
+LEN_CACHE_BYTES = 100*1024 # max lines of log header
 CACHE_HEADER = None
 CACHE_TAIL = None
 
@@ -106,42 +106,46 @@ class Cases():
         return lengths
 
     def find_cases(self):
-        import sys
         while True:
-            exc_info = sys.exc_info()
-            try:
-                top = self.path
-                for r, dirs, _ in os.walk(self.path):
-                    dirs[:] = [d for d in dirs
-                            if "processor" not in d
-                            and "constant" not in d
-                            and "lagrangian" not in d
-                            and "postProcessing" not in d
-                            and "dynamicCode" not in d
-                            and "system" not in d
-                            ]
-                    level = r.count(os.sep) - top.count(os.sep)
-                    # if level > 2:
-                    #      continue
-                    for d in dirs:
-                        try:
-                            c = Case(os.path.join(r, d))
-                            subfold = r.split("/")[-1]
-                            if c.is_valid:
-                                exists = False
-                                for existing in self.cases[subfold]:
-                                    if c.path == existing.path:
-                                        exists  = True
-                                if not exists:
-                                    self.cases[subfold].append(c)
-                        except Exception as e:
-                            pass
-                            # print("innner", e, r)
-            except Exception as e:
-                pass
-                import traceback
-                print(traceback.print_exception(*exc_info))
-                print(e, r)
+            # try:
+            top = self.path
+            for r, dirs, _ in os.walk(self.path):
+
+                ignore = [
+                    "boundaryData",
+                    "uniform",
+                    "processor",
+                    "constant",
+                    "lagrangian",
+                    "postProcessing",
+                    "dynamicCode",
+                    "system"]
+
+                for d in deepcopy(dirs):
+                    for i in ignore:
+                        if d.startswith(i):
+                            dirs.remove(d)
+
+                level = r.count(os.sep) - top.count(os.sep)
+                # if level > 2:
+                #      continue
+                for d in dirs:
+                    try:
+                        c = Case(os.path.join(r, d))
+                        subfold = r.split("/")[-1]
+                        if c.is_valid:
+                            exists = False
+                            for existing in self.cases[subfold]:
+                                if c.path == existing.path:
+                                    exists = True
+                            if not exists:
+                                self.cases[subfold].append(c)
+                    except Exception as e:
+                        # print("innner", e, r, d)
+                        pass
+            # except Exception as e:
+            #     pass
+            #     print(e, r)
 
     def print_header(self, lengths):
         width_progress = lengths[0]
@@ -394,6 +398,8 @@ class Log():
     @property
     def is_valid(self):
         # TODO Fails on decompose logs
+        if not self.path:
+            return False
         if (self.Exec == "decomposePar") or (self.Exec == "blockMesh") or (self.Exec == "mapFields"):
             return False
         try:
