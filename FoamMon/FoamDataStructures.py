@@ -276,17 +276,24 @@ class Case():
         else:
             return None
 
+    def get_float_controlDict(self, key):
+        ret = self.get_key_controlDict(key)
+        if ret:
+            return float(ret)
+        else:
+            return 0
+
     @property
     def endTime(self):
-        return float(self.get_key_controlDict("endTime"))
+        return self.get_float_controlDict("endTime")
 
     @property
     def writeInterval(self):
-        return float(self.get_key_controlDict("writeInterval"))
+        return self.get_float_controlDict("writeInterval")
 
     @property
     def startSampling(self):
-        return float(self.get_key_controlDict("timeStart"))
+        return self.get_float_controlDict("timeStart")
 
     @property
     def startSamplingPerc(self):
