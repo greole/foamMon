@@ -288,8 +288,17 @@ class Case():
         return self.get_float_controlDict("endTime")
 
     @property
+    def writeControl(self):
+        return self.get_key_controlDict("writeControl")
+
+    @property
     def writeInterval(self):
-        return self.get_float_controlDict("writeInterval")
+        if self.writeControl == "runTime":
+            return self.get_float_controlDict("writeInterval")
+        else:
+            return (self.get_float_controlDict("writeInterval") *
+                    self.get_float_controlDict("deltaT"))
+
 
     @property
     def startSampling(self):
