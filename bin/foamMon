@@ -10,6 +10,7 @@
         -h --help           Show this screen
         -v --verbose        Print current log
         -m --multi          Display cases in subfolders
+        --filter=key        Display only lines with given keyword
         --log=file          Use specific logfile
 """
 
@@ -48,5 +49,6 @@ if __name__ == '__main__':
         cases.print_status()
 
     else:
-        case = Case(os.getcwd())
+        case = Case(os.getcwd(),
+                log_filter=arguments["--filter"])
         case.print_status_full()

@@ -183,11 +183,13 @@ class Cases():
 
 class Case():
 
-    def __init__(self, path, summary=False):
+    def __init__(self, path, log_format="log", summary=False, log_filter=None):
         self.path = path
         self.basename = os.path.basename(self.path)
-        self.log_fns = self.find_logs()
+        self.log_format = log_format
+        self.log_fns = self.find_logs(self.log_format)
         self.log = Log(self.find_recent_log_fn(), self)
+        self.log_filter = log_filter
 
         if summary:
             if self.log.active:
@@ -216,12 +218,12 @@ class Case():
         return bar.draw()
 
 
-    def find_logs(self):
+    def find_logs(self, log_format):
        """ returns a list of filenames and ctimes """
        # print(self.path)
        r, d, files = next(os.walk(self.path))
        # TODO use regex to find logs
-       files = list(filter(lambda x: "log" in x, files))
+       files = list(filter(lambda x: log_format in x, files))
        files = [os.path.join(r, f) for f in files]
        ctimes = [os.path.getctime(os.path.join(self.path, f)) for f in files]
        # print(self.path, files)
@@ -338,8 +340,8 @@ class Case():
         while True:
             self.log.print_log_body()
             try:
-                prog_prec = self.log.progress(case.endTime)*100.0
-                print(self.case.status_bar())
+                prog_prec = self.log.progress(self.endTime)*100.0
+                print(self.status_bar(100))
                 print("Case properties: ")
                 print("Job start time: ", self.log.start_time)
                 print("Job elapsed_ time: ", timedelta(seconds=self.log.wall_time))
@@ -348,10 +350,11 @@ class Case():
                 print("Case end time: ", self.endTime)
                 print("Current sim time: ", self.log.sim_time)
                 print("Last time step on disk: ", self.last_timestep)
-                print("Time next writeout: ", timedelta(seconds=self.timeleft_writeout()))
+                print("Time next writeout: ", timedelta(self.log.time_till_writeout()))
                 print("Progress: ", prog_prec)
-                print("Timeleft: ", timedelta(seconds=self.log.timeleft(case.endTime)))
-            except:
+                print("Timeleft: ", timedelta(self.log.timeleft()))
+            except Exception as e:
+                print(e)
                 pass
             self.log.refresh()
             time.sleep(0.2)
@@ -473,7 +476,12 @@ class Log():
         sep_width = 120
         print(self.path)
         print("="*sep_width)
-        body_str = ("".join(self.cached_body.split("\n")[-30:-1]))
+        if self.case.log_filter:
+            lines = self.cached_body.split("\n")
+            filt_lines = [l for l in lines if self.case.log_filter in l][-30:-1]
+            body_str = ("\n".join(filt_lines))
+        else:
+            body_str = ("\n".join(self.cached_body.split("\n")[-30:-1]))
         print(body_str)
 
     @property
