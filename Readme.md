@@ -2,6 +2,8 @@
 
 A simple tool for monitoring the progress of OpenFOAM simulations
 
+![screenshot](https://github.com/greole/foamMon/blob/master/.assets/screen.png)
+
 # Installation
 
 User installation
