@@ -10,7 +10,7 @@ foamMon can be installed from the Pypi repositories
 
     pip3 install foamMon
 
-or direcetly from this repo
+or directly from this repo
 
     python3 setup.py install --user
 
