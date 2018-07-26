@@ -10,6 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from copy import deepcopy
 
+import sys
+
 LEN_CACHE = 10000 # max lines of log header
 LEN_CACHE_BYTES = 100*1024 # max lines of log header
 CACHE_HEADER = None
@@ -63,35 +65,41 @@ class Cases():
         print("Searching Logfiles")
         self.cases = defaultdict(list)
         p = ThreadPoolExecutor(1)
+        self.running = True
         p.submit(self.find_cases)
         while True:
-            case_stats = {}
-            cases = deepcopy(self.cases)
-            for r, cs in cases.items():
-                for c in cs:
-                    if (c.log.active):
-                        c.log.refresh()
-                case_stats[r] = {"active": [c.print_status_short() for c in cs
-                        if (c.print_status_short() and c.log.active)],
-                            "inactive": [c.print_status_short() for c in cs
-                        if (c.print_status_short() and not c.log.active)]
-                        }
+            try:
+                case_stats = {}
+                cases = deepcopy(self.cases)
+                for r, cs in cases.items():
+                    for c in cs:
+                        if (c.log.active):
+                            c.log.refresh()
+                    case_stats[r] = {"active": [c.print_status_short() for c in cs
+                            if (c.print_status_short() and c.log.active)],
+                                "inactive": [c.print_status_short() for c in cs
+                            if (c.print_status_short() and not c.log.active)]
+                            }
 
-            lengths = self.get_max_lengths(case_stats)
+                lengths = self.get_max_lengths(case_stats)
 
-            os.system("clear")
-            print(foamMonHeader)
-            # print(self.cases)
-            self.print_header(lengths)
-            # print(self.cases)
-            for r, cs in case_stats.items():
-                print("subfolder: " + os.path.basename(r))
-                for c in cs["active"]:
-                        print(c.to_str(lengths))
-                for c in cs["inactive"]:
-                        print(c.to_str(lengths))
-            self.print_legend()
-            time.sleep(0.2)
+                os.system("clear")
+                print(foamMonHeader)
+                # print(self.cases)
+                self.print_header(lengths)
+                # print(self.cases)
+                for r, cs in case_stats.items():
+                    print("subfolder: " + os.path.basename(r))
+                    for c in cs["active"]:
+                            print(c.to_str(lengths))
+                    for c in cs["inactive"]:
+                            print(c.to_str(lengths))
+                self.print_legend()
+                time.sleep(0.2)
+            except KeyboardInterrupt:
+                print("Exiting")
+                self.running = False
+                sys.exit(0)
 
     def get_max_lengths(self, statuses):
         lengths = [0 for _ in range(6)]
@@ -106,7 +114,8 @@ class Cases():
         return lengths
 
     def find_cases(self):
-        while True:
+
+        while self.running:
             # try:
             top = self.path
             for r, dirs, _ in os.walk(self.path):
@@ -315,7 +324,6 @@ class Case():
         return self.log.sim_time
 
     def print_status_short(self):
-        import sys
         try:
             exc_info = sys.exc_info()
             return Status(
