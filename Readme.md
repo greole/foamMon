@@ -6,7 +6,11 @@ A simple tool for monitoring the progress of OpenFOAM simulations
 
 # Installation
 
-User installation
+foamMon can be installed from the Pypi repositories
+
+    pip3 install foamMon
+
+or direcetly from this repo
 
     python3 setup.py install --user
 
