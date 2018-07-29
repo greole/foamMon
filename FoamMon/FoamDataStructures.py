@@ -56,6 +56,27 @@ class ColoredProgressBar():
     def draw(self):
         return "".join(self.digits)
 
+def CasesStats():
+    """ Handle status of collection of cases to handle case ids """
+
+    # [case] sorted by id, folder, active
+
+    def __init__(self, case_explorer):
+
+        self.case_explorer = case_explorer
+
+
+    def stats(self):
+        pass
+
+    def active(self):
+        pass
+
+
+    def inactive(self):
+        pass
+
+
 
 class Cases():
 
@@ -88,18 +109,37 @@ class Cases():
                 # print(self.cases)
                 self.print_header(lengths)
                 # print(self.cases)
+                i = 0
                 for r, cs in case_stats.items():
                     print("subfolder: " + os.path.basename(r))
                     for c in cs["active"]:
-                            print(c.to_str(lengths))
+                            print(c.to_str(lengths, i))
+                            i += 1
                     for c in cs["inactive"]:
-                            print(c.to_str(lengths))
+                            print(c.to_str(lengths, i))
+                            i += 1
                 self.print_legend()
                 time.sleep(0.2)
             except KeyboardInterrupt:
-                print("Exiting")
-                self.running = False
-                sys.exit(0)
+                print("Press:\n\tq to quit\n\tz <number> to focus")
+                c = sys.stdin.readline()
+                if c.startswith("q"):
+                    self.running = False
+                    sys.exit(0)
+                if c.startswith("z"):
+                    print("focusing")
+                    n = int(c.replace("z", ""))
+                    #TODO Refactor this
+                    i = 0
+                    for r, cs in case_stats.items():
+                        for c in cs["active"]:
+                                i += 1
+                                if i == n:
+                                    c.case.print_status_full()
+                        for c in cs["inactive"]:
+                                i += 1
+                                if i == n:
+                                    c.case.print_status_full()
 
     def get_max_lengths(self, statuses):
         lengths = [0 for _ in range(6)]
@@ -163,7 +203,7 @@ class Cases():
         width_time =  lengths[3] + 2
         width_next_write =  max(12, lengths[4] + 2)
         width_finishes =  lengths[5] + 2
-        s = "{: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
+        s = "  {: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
         s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
         s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
                 width_progress=width_progress,
@@ -327,6 +367,7 @@ class Case():
         try:
             exc_info = sys.exc_info()
             return Status(
+                    self,
                     self.status_bar(digits=50),
                     # Style.BRIGHT if self.log.active else Style.DIM,
                     50,
@@ -370,8 +411,10 @@ class Case():
 
 
 class Status():
+    """ Handle status of single case for simple printing  """
 
-    def __init__(self, bar, digits, active, base, name, time, wo, tl):
+    def __init__(self, case, bar, digits, active, base, name, time, wo, tl):
+        self.case = case
         self.bar = str(bar)
         self.digits = digits
         self.active = active
@@ -386,7 +429,7 @@ class Status():
         return [self.digits, len(self.base), len(self.name),
                 len(self.time), len(self.wo), len(self.tl)]
 
-    def to_str(self, lengths):
+    def to_str(self, lengths, index):
         width_progress = lengths[0] + 2
         width_folder =  lengths[1] + 2
         width_log =  lengths[2] + 2
@@ -394,11 +437,12 @@ class Status():
         width_next_write =  max(12, lengths[4] + 2)
         width_finishes =  lengths[5] + 2
         style = Style.BRIGHT if self.active else Style.DIM
-        s = "{: ^{width_progress}}|"
+        s = "{:^2} {: ^{width_progress}}|"
         s += style +  "{: ^{width_folder}}|{: ^{width_log}}|"
         s += "{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
         s += Style.RESET_ALL
         s = s.format(
+                index,
                 self.bar, self.base, self.name, self.time, self.wo, self.tl,
                 width_progress=width_progress,
                 width_folder=width_folder,
