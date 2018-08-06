@@ -2,38 +2,19 @@ from docopt import docopt
 from colorama import Fore, Back, Style
 # from datetime import datetime, timedelta
 import datetime
-import glob
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from copy import deepcopy
 from .Log import Log
+from .cui import foamMonHeader
 
 import sys
 
-LEN_CACHE = 10000 # max lines of log header
-LEN_CACHE_BYTES = 100*1024 # max lines of log header
-CACHE_HEADER = None
-CACHE_TAIL = None
 
 def timedelta(seconds):
     return datetime.timedelta(seconds=int(max(0, seconds)))
-
-foamMonHeader = """
-8 8888888888       ,o888888o.           .8.                   ,8.       ,8.                   ,8.       ,8.           ,o888888o.     b.             8
-8 8888          . 8888     `88.        .888.                 ,888.     ,888.                 ,888.     ,888.       . 8888     `88.   888o.          8
-8 8888         ,8 8888       `8b      :88888.               .`8888.   .`8888.               .`8888.   .`8888.     ,8 8888       `8b  Y88888o.       8
-8 8888         88 8888        `8b    . `88888.             ,8.`8888. ,8.`8888.             ,8.`8888. ,8.`8888.    88 8888        `8b .`Y888888o.    8
-8 888888888888 88 8888         88   .8. `88888.           ,8'8.`8888,8^8.`8888.           ,8'8.`8888,8^8.`8888.   88 8888         88 8o. `Y888888o. 8
-8 8888         88 8888         88  .8`8. `88888.         ,8' `8.`8888' `8.`8888.         ,8' `8.`8888' `8.`8888.  88 8888         88 8`Y8o. `Y88888o8
-8 8888         88 8888        ,8P .8' `8. `88888.       ,8'   `8.`88'   `8.`8888.       ,8'   `8.`88'   `8.`8888. 88 8888        ,8P 8   `Y8o. `Y8888
-8 8888         `8 8888       ,8P .8'   `8. `88888.     ,8'     `8.`'     `8.`8888.     ,8'     `8.`'     `8.`8888.`8 8888       ,8P  8      `Y8o. `Y8
-8 8888          ` 8888     ,88' .888888888. `88888.   ,8'       `8        `8.`8888.   ,8'       `8        `8.`8888.` 8888     ,88'   8         `Y8o.`
-8 8888             `8888888P'  .8'       `8. `88888. ,8'         `         `8.`8888. ,8'         `         `8.`8888.  `8888888P'     8            `Yo
-                                                                                                              by Gregor Olenik, go@hpsim.de, hpsim.de
-"""
 
 class ColoredProgressBar():
 
@@ -53,6 +34,28 @@ class ColoredProgressBar():
     def add_event(self, percentage, color):
         index = int(percentage*self.size)
         self.digits[index] = color + "█" + Style.RESET_ALL
+
+    def draw(self):
+        return "".join(self.digits)
+
+class ProgressBar():
+
+
+    events = []
+
+    def __init__(self, size, progress=0):
+        self.size = size
+        self.done_char = "█"
+        self.undone_char = " "
+        self.digits = [self.done_char
+                for _ in range(int(progress*size))]
+        self.digits.extend([self.undone_char
+                for _ in range(size - int(progress*size))])
+
+
+    def add_event(self, percentage, color):
+        index = int(percentage*self.size)
+        self.digits[index] = "█"
 
     def draw(self):
         return "".join(self.digits)
@@ -84,63 +87,25 @@ class Cases():
     def __init__(self, path):
         self.path = path
         os.system("clear")
-        print("Searching Logfiles")
         self.cases = defaultdict(list)
         p = ThreadPoolExecutor(1)
         self.running = True
         p.submit(self.find_cases)
-        while True:
-            try:
-                case_stats = {}
-                cases = deepcopy(self.cases)
-                for r, cs in cases.items():
-                    for c in cs:
-                        if (c.log.active):
-                            c.log.refresh()
-                    case_stats[r] = {"active": [c.print_status_short() for c in cs
-                            if (c.print_status_short() and c.log.active)],
-                                "inactive": [c.print_status_short() for c in cs
-                            if (c.print_status_short() and not c.log.active)]
-                            }
 
-                lengths = self.get_max_lengths(case_stats)
-
-                os.system("clear")
-                print(foamMonHeader)
-                # print(self.cases)
-                self.print_header(lengths)
-                # print(self.cases)
-                i = 0
-                for r, cs in case_stats.items():
-                    print("subfolder: " + os.path.basename(r))
-                    for c in cs["active"]:
-                            print(c.to_str(lengths, i))
-                            i += 1
-                    for c in cs["inactive"]:
-                            print(c.to_str(lengths, i))
-                            i += 1
-                self.print_legend()
-                time.sleep(0.2)
-            except KeyboardInterrupt:
-                print("Press:\n\tq to quit\n\tz <number> to focus")
-                c = sys.stdin.readline()
-                if c.startswith("q"):
-                    self.running = False
-                    sys.exit(0)
-                if c.startswith("z"):
-                    print("focusing")
-                    n = int(c.replace("z", ""))
-                    #TODO Refactor this
-                    i = 0
-                    for r, cs in case_stats.items():
-                        for c in cs["active"]:
-                                i += 1
-                                if i == n:
-                                    c.case.print_status_full()
-                        for c in cs["inactive"]:
-                                i += 1
-                                if i == n:
-                                    c.case.print_status_full()
+    def get_valid_cases(self):
+        case_stats = {}
+        cases = deepcopy(self.cases)
+        for r, cs in cases.items():
+            for c in cs:
+                if (c.log.active):
+                    c.log.refresh()
+            case_stats[r] = {"active": [c.print_status_short() for c in cs
+                    if (c.print_status_short() and c.log.active)],
+                        "inactive": [c.print_status_short() for c in cs
+                    if (c.print_status_short() and not c.log.active)]
+                    }
+        lengths = self.get_max_lengths(case_stats)
+        return lengths, case_stats
 
     def get_max_lengths(self, statuses):
         lengths = [0 for _ in range(6)]
@@ -176,7 +141,7 @@ class Cases():
                         if d.startswith(i):
                             dirs.remove(d)
 
-                level = r.count(os.sep) - top.count(os.sep)
+                # level = r.count(os.sep) - top.count(os.sep)
                 # if level > 2:
                 #      continue
                 for d in dirs:
@@ -191,7 +156,7 @@ class Cases():
                             if not exists:
                                 self.cases[subfold].append(c)
                     except Exception as e:
-                        # print("innner", e, r, d)
+                        print("innner", e, r, d)
                         pass
             # except Exception as e:
             #     pass
@@ -263,7 +228,7 @@ class Case():
         return ctDct
 
     def status_bar(self, digits=100):
-        bar = ColoredProgressBar(digits, self.log.progress(self.endTime))
+        bar = ProgressBar(digits, self.log.progress(self.endTime))
         bar.add_event(self.startSamplingPerc, Fore.YELLOW)
         return bar.draw()
 
@@ -428,29 +393,3 @@ class Status():
     def lengths(self):
         return [self.digits, len(self.base), len(self.name),
                 len(self.time), len(self.wo), len(self.tl)]
-
-    def to_str(self, lengths, index):
-        width_progress = lengths[0] + 2
-        width_folder =  lengths[1] + 2
-        width_log =  lengths[2] + 2
-        width_time =  lengths[3] + 2
-        width_next_write =  max(12, lengths[4] + 2)
-        width_finishes =  lengths[5] + 2
-        style = Style.BRIGHT if self.active else Style.DIM
-        s = "{:^2} {: ^{width_progress}}|"
-        s += style +  "{: ^{width_folder}}|{: ^{width_log}}|"
-        s += "{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
-        s += Style.RESET_ALL
-        s = s.format(
-                index,
-                self.bar, self.base, self.name, self.time, self.wo, self.tl,
-                width_progress=width_progress,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
-        return s
-
-
