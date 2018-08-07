@@ -23,6 +23,8 @@ import datetime
 palette = [
     ('titlebar', 'dark red', ''),
     ('refresh button', 'dark green,bold', ''),
+    ('progress', 'dark green', ''),
+    ('unprogressed', 'dark red', ''),
     ('quit button', 'dark red', ''),
     ('getting quote', 'dark blue', ''),
     ('active', 'white,bold', ''),
@@ -32,7 +34,39 @@ palette = [
 
 # class StatusWidget():
 
-# Handle key presses
+# class CaseElem(urwid.WidgetWrap):
+#
+#     def __init__(self, text, size):
+#
+class ProgressBar():
+
+
+    events = []
+
+    def __init__(self, size, progress=0):
+        self.size = size
+        self.done_char = "█"
+        self.undone_char = "█"
+        self.digits_done = [self.done_char
+                for _ in range(int(progress*size))]
+        self.digits_undone = [self.undone_char
+                for _ in range(size - int(progress*size))]
+
+
+    def add_event(self, percentage, color):
+        index = int(percentage*self.size)
+        self.digits[index] = "█"
+
+    def draw(self):
+        return "".join(self.digits)
+
+    def render(self):
+        return urwid.Text([("progress", "".join(self.digits_done)),
+                     ("unprogressed", "".join(self.digits_undone))])
+
+
+
+
 class CaseRow(urwid.WidgetWrap):
 
     def __init__(self, case, length=False, active=False):
@@ -42,27 +76,33 @@ class CaseRow(urwid.WidgetWrap):
         self.lengths = length
 
         mode_text = "active" if self.active else "inactive"
-        urwid.WidgetWrap.__init__(self, urwid.Text((mode_text, self.status_text), "center"))
+        # urwid.WidgetWrap.__init__(self, urwid.Text((mode_text, self.status_text), "center"))
+
+        bar = ProgressBar(50, self.case.progress).render()
+        urwid.WidgetWrap.__init__(self, urwid.Columns(
+            [("pack", bar), ("pack", urwid.Text((mode_text, self.status_text)))]))
 
     @property
     def status_text(self):
         if not self.lengths:
-            return "{} │ {} │ {} │ {} │ {} │ {}".format(self.case.bar, self.case.base, self.case.name, self.case.time, self.case.wo, self.case.tl)
+            return "│ {} │ {} │ {} │ {} │ {}".format(
+                # self.case.bar, self.case.base, self.case.name, self.case.time, self.case.wo, self.case.tl)
+                self.case.base, self.case.name, self.case.time, self.case.wo, self.case.tl)
         else:
-            width_progress = self.lengths[0] + 2
+            # width_progress = self.lengths[0] + 2
             width_folder =  self.lengths[1] + 2
             width_log =  self.lengths[2] + 2
             width_time =  self.lengths[3] + 2
             width_next_write =  max(12, self.lengths[4] + 2)
             width_finishes =  self.lengths[5] + 2
-            s = "{: ^{width_progress}}│"
-            s += "{: ^{width_folder}}│{: ^{width_log}}│"
+            # s = "{: ^{width_progress}}│"
+            s = "{: ^{width_folder}}│{: ^{width_log}}│"
             s += "{: ^{width_time}}│{: ^{width_next_write}}│{: ^{width_finishes}}"
             s = s.format(
                     # index,
-                    self.case.bar, self.case.base, self.case.name,
+                    self.case.base, self.case.name,
                     self.case.time, self.case.wo, self.case.tl,
-                    width_progress=width_progress,
+                    # width_progress=width_progress,
                     width_folder=width_folder,
                     width_log=width_log,
                     width_time=width_time,
@@ -83,7 +123,9 @@ class DisplaySub(urwid.WidgetWrap):
         urwid.WidgetWrap.__init__(self, self.frame)
 
     def draw(self):
-        items = [("pack", CaseRow(c, self.lengths, active=True)) for c in self.elems["active"]]
+        items = [("pack", CaseRow(c, self.lengths, active=True))
+                for c in self.elems["active"]]
+
         if not self.hide_inactive:
             items += [("pack", CaseRow(c, self.lengths, active=False))
                     for c in self.elems["inactive"]]
@@ -92,7 +134,7 @@ class DisplaySub(urwid.WidgetWrap):
             header=urwid.Text(("casefolder", self.props_str)),
             body=urwid.Pile(items),
             footer=urwid.Divider("─")),
-            height=len(items)+1)
+            height=len(items) + 2) # items + 1 and header and footer
 
     @property
     def props_str(self):
