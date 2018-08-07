@@ -23,8 +23,9 @@ import datetime
 palette = [
     ('titlebar', 'dark red', ''),
     ('refresh button', 'dark green,bold', ''),
-    ('progress', 'dark green', ''),
-    ('unprogressed', 'dark red', ''),
+    ('progress', '', 'dark green'),
+    ('unprogressed', '', 'dark blue'),
+    ('sampling', '', 'yellow'),
     ('quit button', 'dark red', ''),
     ('getting quote', 'dark blue', ''),
     ('active', 'white,bold', ''),
@@ -45,26 +46,24 @@ class ProgressBar():
 
     def __init__(self, size, progress=0):
         self.size = size
-        self.done_char = "█"
-        self.undone_char = "█"
+        self.done_char = ("progress", " ")  # "█"
+        self.undone_char = ("unprogressed", " ")  #"█"
         self.digits_done = [self.done_char
                 for _ in range(int(progress*size))]
         self.digits_undone = [self.undone_char
                 for _ in range(size - int(progress*size))]
+        self.digits = self.digits_done + self.digits_undone
 
 
     def add_event(self, percentage, color):
         index = int(percentage*self.size)
-        self.digits[index] = "█"
+        self.digits[index] = (color, " ")
 
     def draw(self):
         return "".join(self.digits)
 
     def render(self):
-        return urwid.Text([("progress", "".join(self.digits_done)),
-                     ("unprogressed", "".join(self.digits_undone))])
-
-
+        return urwid.Text(self.digits)
 
 
 class CaseRow(urwid.WidgetWrap):
@@ -76,9 +75,10 @@ class CaseRow(urwid.WidgetWrap):
         self.lengths = length
 
         mode_text = "active" if self.active else "inactive"
-        # urwid.WidgetWrap.__init__(self, urwid.Text((mode_text, self.status_text), "center"))
 
-        bar = ProgressBar(50, self.case.progress).render()
+        bar = ProgressBar(50, self.case.progress)
+        bar.add_event(self.case.case.startSamplingPerc, "sampling")
+        bar = bar.render()
         urwid.WidgetWrap.__init__(self, urwid.Columns(
             [("pack", bar), ("pack", urwid.Text((mode_text, self.status_text)))]))
 
@@ -96,8 +96,8 @@ class CaseRow(urwid.WidgetWrap):
             width_next_write =  max(12, self.lengths[4] + 2)
             width_finishes =  self.lengths[5] + 2
             # s = "{: ^{width_progress}}│"
-            s = "{: ^{width_folder}}│{: ^{width_log}}│"
-            s += "{: ^{width_time}}│{: ^{width_next_write}}│{: ^{width_finishes}}"
+            s = "{: ^{width_folder}}{: ^{width_log}}"
+            s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
             s = s.format(
                     # index,
                     self.case.base, self.case.name,
@@ -194,8 +194,15 @@ class LogMonFrame(urwid.WidgetWrap):
                 u'Press (', ('mode button', u'F'), u') to focus. ',
                     u'Press (', ('quit button', u'Q'), u') to quit.'],
                     align="right")
+        legend = urwid.Text(["Legend: ",
+            ("progress", " "), " Progress ",
+            ("active", "Active"), " ",
+            ("inactive", "Inactive"), " ",
+            ("sampling", " "), " Sampling Start"])
+        footer = urwid.Columns([legend, menu])
 
-        return urwid.Frame(header=banner, body=body, footer=menu)
+
+        return urwid.Frame(header=banner, body=body, footer=footer)
 
     def animate(self, loop=None, data=None):
         self.bodyTxt = self.bodyTxt.update()
