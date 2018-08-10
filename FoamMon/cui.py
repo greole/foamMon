@@ -189,7 +189,9 @@ class LogText(urwid.WidgetWrap):
 
     def draw(self):
         global CASE_REFS
-        return urwid.Pile([("pack", urwid.Text(CASE_REFS[0].log.cached_body))])
+        return urwid.Pile([
+            ("pack", urwid.Text(CASE_REFS[0].path)),
+            ("pack", urwid.Text(CASE_REFS[0].log.cache_body()))])
 
     def update(self):
         self._w = self.draw()
