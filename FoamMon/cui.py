@@ -26,7 +26,7 @@ palette = [
     ('progress', '', 'dark green'),
     ('unprogressed', '', 'dark blue'),
     ('sampling', '', 'yellow'),
-    ('quit button', 'dark red', ''),
+    ('quit button', 'dark red,bold', ''),
     ('getting quote', 'dark blue', ''),
     ('active', 'white,bold', ''),
     ('mode button', 'white,bold', ''),
@@ -39,6 +39,9 @@ palette = [
 #
 #     def __init__(self, text, size):
 #
+
+CASE_CTR = 0
+
 class ProgressBar():
 
 
@@ -68,11 +71,14 @@ class ProgressBar():
 
 class CaseRow(urwid.WidgetWrap):
 
-    def __init__(self, case, length=False, active=False):
+    def __init__(self, case, Id, length=False, active=False):
 
         self.case = case
         self.active = active
         self.lengths = length
+        global CASE_CTR 
+        CASE_CTR +=  1
+        self.Id = CASE_CTR
 
         mode_text = "active" if self.active else "inactive"
 
@@ -80,55 +86,60 @@ class CaseRow(urwid.WidgetWrap):
         bar.add_event(self.case.case.startSamplingPerc, "sampling")
         bar = bar.render()
         urwid.WidgetWrap.__init__(self, urwid.Columns(
-            [("pack", bar), ("pack", urwid.Text((mode_text, self.status_text)))]))
+            [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id)))),
+                ("pack", bar),
+                ("pack", urwid.Text((mode_text, self.status_text)))]))
 
     @property
     def status_text(self):
-        if not self.lengths:
-            return "│ {} │ {} │ {} │ {} │ {}".format(
-                # self.case.bar, self.case.base, self.case.name, self.case.time, self.case.wo, self.case.tl)
-                self.case.base, self.case.name, self.case.time, self.case.wo, self.case.tl)
-        else:
-            # width_progress = self.lengths[0] + 2
-            width_folder =  self.lengths[1] + 2
-            width_log =  self.lengths[2] + 2
-            width_time =  self.lengths[3] + 2
-            width_next_write =  max(12, self.lengths[4] + 2)
-            width_finishes =  self.lengths[5] + 2
-            # s = "{: ^{width_progress}}│"
-            s = "{: ^{width_folder}}{: ^{width_log}}"
-            s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
-            s = s.format(
-                    # index,
-                    self.case.base, self.case.name,
-                    self.case.time, self.case.wo, self.case.tl,
-                    # width_progress=width_progress,
-                    width_folder=width_folder,
-                    width_log=width_log,
-                    width_time=width_time,
-                    width_next_write=width_next_write,
-                    width_finishes=width_finishes,
-                    )
-            return s
+        width_folder =  self.lengths[1] + 2
+        width_log =  self.lengths[2] + 2
+        width_time =  self.lengths[3] + 2
+        width_next_write =  max(12, self.lengths[4] + 2)
+        width_finishes =  self.lengths[5] + 2
+        # s = "{: ^{width_progress}}│"
+        s = "{: ^{width_folder}}{: ^{width_log}}"
+        s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
+        s = s.format(
+                # index,
+                self.case.base, self.case.name,
+                self.case.time, self.case.wo, self.case.tl,
+                # width_progress=width_progress,
+                width_folder=width_folder,
+                width_log=width_log,
+                width_time=width_time,
+                width_next_write=width_next_write,
+                width_finishes=width_finishes,
+                )
+        return s
 
 
 class DisplaySub(urwid.WidgetWrap):
 
-    def __init__(self, name, elems, lengths, hide_inactive):
+    def __init__(self, Id, name, elems, lengths, hide_inactive):
         self.path = name
         self.elems = elems
         self.lengths = lengths
+        self.Id = Id
         self.hide_inactive = hide_inactive
         self.frame = self.draw()
         urwid.WidgetWrap.__init__(self, self.frame)
 
+    @property
+    def active(self):
+        return self.elems["active"]
+
+    @property
+    def inactive(self):
+        return self.elems["inactive"]
+
     def draw(self):
-        items = [("pack", CaseRow(c, self.lengths, active=True))
-                for c in self.elems["active"]]
+        items = [("pack", CaseRow(c, (i+1)*self.Id, self.lengths, active=True))
+                for i, c in enumerate(self.active)]
 
         if not self.hide_inactive:
-            items += [("pack", CaseRow(c, self.lengths, active=False))
-                    for c in self.elems["inactive"]]
+            items += [("pack", CaseRow(c, (i+1+len(self.active))*self.Id, self.lengths, active=False))
+                    for i, c in enumerate(self.inactive)]
 
         return urwid.BoxAdapter(urwid.Frame(
             header=urwid.Text(("casefolder", self.props_str)),
@@ -157,8 +168,8 @@ class CasesList(urwid.WidgetWrap):
 
     def draw(self):
         lengths, valid_cases = self.cases.get_valid_cases()
-        items = [DisplaySub(path, elems, lengths, self.hide_inactive)
-            for path, elems in valid_cases.items()]
+        items = [DisplaySub(i+1, path, elems, lengths, self.hide_inactive)
+            for i, (path, elems) in enumerate(valid_cases.items())]
         return urwid.ListBox(urwid.SimpleFocusListWalker(items))
 
     def update(self):
@@ -190,9 +201,9 @@ class LogMonFrame(urwid.WidgetWrap):
         body = urwid.LineBox(self.bodyTxt)
 
         menu = urwid.Text([
-                u'Press (', ('mode button', u'T'), u') to toggle active. ',
-                u'Press (', ('mode button', u'F'), u') to focus. ',
-                    u'Press (', ('quit button', u'Q'), u') to quit.'],
+                u'Press (', ('mode button', u'T'), u') to toggle active, ',
+                u'(', ('mode button', u'F'), u') to focus, ',
+                u'(', ('quit button', u'Q'), u') to quit,'],
                     align="right")
         legend = urwid.Text(["Legend: ",
             ("progress", " "), " Progress ",
@@ -205,6 +216,8 @@ class LogMonFrame(urwid.WidgetWrap):
         return urwid.Frame(header=banner, body=body, footer=footer)
 
     def animate(self, loop=None, data=None):
+        global  CASE_CTR
+        CASE_CTR = 0
         self.bodyTxt = self.bodyTxt.update()
         self.animate_alarm = self.loop.set_alarm_in(0.01, self.animate)
 
