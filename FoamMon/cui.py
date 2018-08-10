@@ -41,6 +41,7 @@ palette = [
 #
 
 CASE_CTR = 0
+CASE_REFS = []
 
 class ProgressBar():
 
@@ -76,9 +77,11 @@ class CaseRow(urwid.WidgetWrap):
         self.case = case
         self.active = active
         self.lengths = length
-        global CASE_CTR 
+        global CASE_CTR
+        global CASE_REFS
         CASE_CTR +=  1
         self.Id = CASE_CTR
+        CASE_REFS.append(self.case.case)
 
         mode_text = "active" if self.active else "inactive"
 
@@ -176,19 +179,41 @@ class CasesList(urwid.WidgetWrap):
         self._w = self.draw()
         return self
 
+class LogText(urwid.WidgetWrap):
+
+    def __init__(self, cases):
+        self.cases = cases
+        self.hide_inactive = False
+        self.frame = self.draw()
+        urwid.WidgetWrap.__init__(self, self.frame)
+
+    def draw(self):
+        global CASE_REFS
+        return urwid.Pile([("pack", urwid.Text(CASE_REFS[0].log.cached_body))])
+
+    def update(self):
+        self._w = self.draw()
+        return self
+
+
 class LogMonFrame(urwid.WidgetWrap):
 
     def __init__(self, cases):
 
         self.cases = cases
         self.hide_inactive = False
+        self.focus_mode = False
+        self.focus_case = 1
         self.bodyTxt = CasesList(cases, hide_inactive=self.hide_inactive) # urwid.Text("")
         self.frame = self.draw()
         urwid.WidgetWrap.__init__(self, self.frame)
 
     def keypress(self, size, key):
         if key == 'F' or key == 'f':
-            pass
+            self.focus_mode = True
+            self.bodyTxt = LogText(self.cases)
+            self.frame = self.draw()
+            self._w = self.frame
         elif key == 'T' or key == 't':
             self.bodyTxt.hide_inactive = not self.bodyTxt.hide_inactive
         elif key == 'Q' or key == 'q':
@@ -216,8 +241,11 @@ class LogMonFrame(urwid.WidgetWrap):
         return urwid.Frame(header=banner, body=body, footer=footer)
 
     def animate(self, loop=None, data=None):
+        # Reset counter
         global  CASE_CTR
+        # global CASE_REFS
         CASE_CTR = 0
+        # CASE_REFS = []
         self.bodyTxt = self.bodyTxt.update()
         self.animate_alarm = self.loop.set_alarm_in(0.01, self.animate)
 
