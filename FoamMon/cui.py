@@ -41,7 +41,7 @@ palette = [
 #
 
 CASE_CTR = 0
-CASE_REFS = []
+CASE_REFS = {}
 
 class ProgressBar():
 
@@ -81,7 +81,7 @@ class CaseRow(urwid.WidgetWrap):
         global CASE_REFS
         CASE_CTR +=  1
         self.Id = CASE_CTR
-        CASE_REFS.append(self.case.case)
+        CASE_REFS[int(self.Id)] = self.case.case
 
         mode_text = "active" if self.active else "inactive"
 
@@ -165,8 +165,8 @@ class CasesList(urwid.WidgetWrap):
 
     def __init__(self, cases, hide_inactive=False):
         self.cases = cases
-        self.frame = self.draw()
         self.hide_inactive = hide_inactive
+        self.frame = self.draw()
         urwid.WidgetWrap.__init__(self, self.frame)
 
     def draw(self):
@@ -181,8 +181,8 @@ class CasesList(urwid.WidgetWrap):
 
 class LogText(urwid.WidgetWrap):
 
-    def __init__(self, cases):
-        self.cases = cases
+    def __init__(self, focus_id):
+        self.focus_id = focus_id
         self.hide_inactive = False
         self.frame = self.draw()
         urwid.WidgetWrap.__init__(self, self.frame)
@@ -190,43 +190,14 @@ class LogText(urwid.WidgetWrap):
     def draw(self):
         global CASE_REFS
         return urwid.Pile([
-            ("pack", urwid.Text(CASE_REFS[0].path)),
-            ("pack", urwid.Text(CASE_REFS[0].log.cache_body()))])
+            ("pack", urwid.Text(CASE_REFS[self.focus_id].path)),
+            ("pack", urwid.Text(CASE_REFS[self.focus_id].log.cache_body()))])
 
     def update(self):
         self._w = self.draw()
         return self
 
-
-class LogMonFrame(urwid.WidgetWrap):
-
-    def __init__(self, cases):
-
-        self.cases = cases
-        self.hide_inactive = False
-        self.focus_mode = False
-        self.focus_case = 1
-        self.bodyTxt = CasesList(cases, hide_inactive=self.hide_inactive) # urwid.Text("")
-        self.frame = self.draw()
-        urwid.WidgetWrap.__init__(self, self.frame)
-
-    def keypress(self, size, key):
-        if key == 'F' or key == 'f':
-            self.focus_mode = True
-            self.bodyTxt = LogText(self.cases)
-            self.frame = self.draw()
-            self._w = self.frame
-        elif key == 'T' or key == 't':
-            self.bodyTxt.hide_inactive = not self.bodyTxt.hide_inactive
-        elif key == 'Q' or key == 'q':
-            self.cases.running = False
-            raise urwid.ExitMainLoop()
-
-    def draw(self):
-        banner = urwid.Text(foamMonHeader, "center")
-
-        body = urwid.LineBox(self.bodyTxt)
-
+def OverViewFooter():
         menu = urwid.Text([
                 u'Press (', ('mode button', u'T'), u') to toggle active, ',
                 u'(', ('mode button', u'F'), u') to focus, ',
@@ -237,8 +208,77 @@ class LogMonFrame(urwid.WidgetWrap):
             ("active", "Active"), " ",
             ("inactive", "Inactive"), " ",
             ("sampling", " "), " Sampling Start"])
-        footer = urwid.Columns([legend, menu])
+        return urwid.Columns([legend, menu])
 
+def FocusFooter():
+        menu = urwid.Text([
+                u'Press (', ('mode button', u'O'), u') for overview mode, ',
+                u'(', ('mode button', u'/'), u') to filter, ',
+                u'(', ('quit button', u'Q'), u') to quit,'],
+                    align="right")
+        legend = urwid.Text(["Legend: ",
+            ("progress", " "), " Progress ",
+            ("active", "Active"), " ",
+            ("inactive", "Inactive"), " ",
+            ("sampling", " "), " Sampling Start"])
+        return urwid.Columns([legend, menu])
+
+case_id_footer = "Case ID: "
+
+class LogMonFrame(urwid.WidgetWrap):
+
+    def __init__(self, cases):
+
+        self.cases = cases
+        self.hide_inactive = False
+        self.focus_mode = False
+        self.focus_case = 1
+        self.edit_case_id = False
+        self.edit_case_txt = ""
+        self.bodyTxt = CasesList(cases, hide_inactive=self.hide_inactive) # urwid.Text("")
+        self.frame = self.draw()
+        urwid.WidgetWrap.__init__(self, self.frame)
+
+    def keypress(self, size, key):
+        # TODO sort by mode ... if self.focus_mode: ..., self.input_mode ...
+        # TODO refactor input mode and use it for filter 
+        if key == 'F' or key == 'f':
+            self.editbox = urwid.Edit(case_id_footer)
+            self.frame = self.draw(footer=lambda : self.editbox)
+            self._w = self.frame
+            self.edit_case_id = not self.edit_case_id
+
+        elif key == 'O' or key == 'o':
+            self.focus_mode = False
+            self.bodyTxt = CasesList(self.cases) # urwid.Text("")
+            self.frame = self.draw()
+            self._w = self.frame
+        elif key == 'T' or key == 't':
+            self.bodyTxt.hide_inactive = not self.bodyTxt.hide_inactive
+        elif key == 'Q' or key == 'q':
+            self.cases.running = False
+            raise urwid.ExitMainLoop()
+        elif self.edit_case_id and key != "enter":
+            self.edit_case_txt += key
+            self.editbox = urwid.Text(case_id_footer + self.edit_case_txt)
+            self.frame = self.draw(footer=lambda : self.editbox)
+            self._w = self.frame
+        elif self.edit_case_id and key == "enter":
+            self.focus_mode = True
+            self.focus_case = int(self.edit_case_txt)
+            self.bodyTxt = LogText(self.focus_case)
+            self.frame = self.draw(footer=FocusFooter)
+            self._w = self.frame
+            self.edit_case_id = not self.edit_case_id
+            self.edit_case_txt = ""
+
+
+    def draw(self, footer=OverViewFooter):
+        banner = urwid.Text(foamMonHeader, "center")
+
+        body = urwid.LineBox(self.bodyTxt)
+
+        footer = footer()
 
         return urwid.Frame(header=banner, body=body, footer=footer)
 
