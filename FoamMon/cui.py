@@ -42,6 +42,9 @@ palette = [
 
 CASE_CTR = 0
 CASE_REFS = {}
+MODE_SWITCH = False
+FOCUS_ID = None
+
 
 class ProgressBar():
 
@@ -161,134 +164,197 @@ class DisplaySub(urwid.WidgetWrap):
         self._w = self.draw()
         return self
 
-class CasesList(urwid.WidgetWrap):
+class CasesListFrame():
 
-    def __init__(self, cases, hide_inactive=False):
+
+    def __init__(self, cases, hide_inactive):
         self.cases = cases
         self.hide_inactive = hide_inactive
-        self.frame = self.draw()
-        urwid.WidgetWrap.__init__(self, self.frame)
 
     def draw(self):
+        """ return a ListBox with all sub folder """
         lengths, valid_cases = self.cases.get_valid_cases()
         items = [DisplaySub(i+1, path, elems, lengths, self.hide_inactive)
             for i, (path, elems) in enumerate(valid_cases.items())]
         return urwid.ListBox(urwid.SimpleFocusListWalker(items))
 
+    def toggle_hide(self):
+        self.hide_inactive = not self.hide_inactive
+
+
+class ScreenParent(urwid.WidgetWrap):
+
+    def __init__(self, frame, mode_switch):
+
+        self._w = frame
+        self.input_mode = False
+        self.mode_switch = mode_switch
+        self.input_txt = ""
+        urwid.WidgetWrap.__init__(self, self._w)
+
     def update(self):
         self._w = self.draw()
         return self
 
-class LogText(urwid.WidgetWrap):
+    def keypress_parent(self, size, key):
+        if key == 'Q' or key == 'q':
+            self.cases.running = False
+            raise urwid.ExitMainLoop()
+        elif self.input_mode:
+            if key != "enter":
+                self.input_txt += key
+                self.input_mode_footer_txt += key
+                self._w = self.draw()
+            elif "enter" in key:
+                # self.focus_mode = True
+                global FOCUS_ID
+                FOCUS_ID= int(self.input_txt)
+                global MODE_SWITCH
+                MODE_SWITCH = True
+
+
+class OverviewScreen(ScreenParent):
+
+    def __init__(self, cases, focus_id, mode_switch, hide_inactive=False):
+        self.cases = cases
+        self.focus_id = focus_id
+        self.hide_inactive = hide_inactive
+        self.cases_list_frame = CasesListFrame(self.cases, self.hide_inactive)
+        self.input_mode_footer_txt = "Case ID: "
+
+        # Draw empty screen first to construct base class
+        self._w = urwid.Text("")
+        self.mode_switch = mode_switch
+        ScreenParent.__init__(self, self._w, self.mode_switch)
+        self._w = self.draw()
+
+    @property
+    def footer(self):
+        if not self.input_mode:
+            menu = urwid.Text([
+                    u'Press (', ('mode button', u'T'), u') to toggle active, ',
+                    u'(', ('mode button', u'F'), u') to focus, ',
+                    u'(', ('quit button', u'Q'), u') to quit,'],
+                        align="right")
+            legend = urwid.Text(["Legend: ",
+                ("progress", " "), " Progress ",
+                ("active", "Active"), " ",
+                ("inactive", "Inactive"), " ",
+                ("sampling", " "), " Sampling Start"])
+            return urwid.Columns([legend, menu])
+        else:
+            return urwid.Edit(self.input_mode_footer_txt)
+
+    def draw(self):
+
+        banner = urwid.Text(foamMonHeader, "center")
+        body = urwid.LineBox(self.cases_list_frame.draw())
+        footer = self.footer
+
+        return urwid.Frame(header=banner, body=body, footer=footer)
+
+    def keypress(self, size, key):
+        if key == 'F' or key == 'f':
+            self.input_mode = not self.input_mode
+            self._w = self.draw()
+        elif key == 'T' or key == 't':
+            self.hide_inactive = not self.hide_inactive
+            self._w = self.draw()
+        else:
+            self.keypress_parent(size, key)
+
+
+class FocusScreen(ScreenParent):
 
     def __init__(self, focus_id):
         self.focus_id = focus_id
         self.hide_inactive = False
-        self.frame = self.draw()
-        urwid.WidgetWrap.__init__(self, self.frame)
+        self.input_mode_footer_txt = "Filter: "
+        self._w = urwid.Text("")
+        ScreenParent.__init__(self, self._w, False)
+        self._w = self.draw()
 
     def draw(self):
+
         global CASE_REFS
-        return urwid.Pile([
-            ("pack", urwid.Text(CASE_REFS[self.focus_id].path)),
-            ("pack", urwid.Text(CASE_REFS[self.focus_id].log.cache_body()))])
+        global FOCUS_ID
+        banner = urwid.Text(foamMonHeader, "center")
+        # body = urwid.LineBox(self.cases_list_frame.draw())
+        body = urwid.Pile([
+            ("pack", urwid.Text(CASE_REFS[FOCUS_ID].path)),
+            ("pack", urwid.Text(CASE_REFS[FOCUS_ID].log.cache_body()))])
+        footer = self.footer
 
-    def update(self):
-        self._w = self.draw()
-        return self
+        return urwid.Frame(header=banner, body=body, footer=footer)
 
-def OverViewFooter():
-        menu = urwid.Text([
-                u'Press (', ('mode button', u'T'), u') to toggle active, ',
-                u'(', ('mode button', u'F'), u') to focus, ',
-                u'(', ('quit button', u'Q'), u') to quit,'],
-                    align="right")
-        legend = urwid.Text(["Legend: ",
-            ("progress", " "), " Progress ",
-            ("active", "Active"), " ",
-            ("inactive", "Inactive"), " ",
-            ("sampling", " "), " Sampling Start"])
-        return urwid.Columns([legend, menu])
 
-def FocusFooter():
-        menu = urwid.Text([
-                u'Press (', ('mode button', u'O'), u') for overview mode, ',
-                u'(', ('mode button', u'/'), u') to filter, ',
-                u'(', ('quit button', u'Q'), u') to quit,'],
-                    align="right")
-        legend = urwid.Text(["Legend: ",
-            ("progress", " "), " Progress ",
-            ("active", "Active"), " ",
-            ("inactive", "Inactive"), " ",
-            ("sampling", " "), " Sampling Start"])
-        return urwid.Columns([legend, menu])
+    @property
+    def footer(self):
+        if not self.input_mode:
+            menu = urwid.Text([
+                    u'Press (', ('mode button', u'O'), u') for overview mode, ',
+                    u'(', ('mode button', u'/'), u') to filter, ',
+                    u'(', ('quit button', u'Q'), u') to quit,'],
+                        align="right")
+            legend = urwid.Text(["Legend: ",
+                ("progress", " "), " Progress ",
+                ("active", "Active"), " ",
+                ("inactive", "Inactive"), " ",
+                ("sampling", " "), " Sampling Start"])
+            return urwid.Columns([legend, menu])
+        else:
+            return urwid.Edit(self.input_mode_footer_txt)
 
-case_id_footer = "Case ID: "
+    def keypress(self, size, key):
+        if key == '/':
+            self.input_mode = not self.input_mode
+            self._w = self.draw()
+        elif key == 'O' or key == 'o':
+            global MODE_SWITCH
+            MODE_SWITCH = True
+        else:
+            self.keypress_parent(size, key)
+
 
 class LogMonFrame(urwid.WidgetWrap):
 
     def __init__(self, cases):
-
         self.cases = cases
-        self.hide_inactive = False
         self.focus_mode = False
-        self.focus_case = 1
-        self.edit_case_id = False
-        self.edit_case_txt = ""
-        self.bodyTxt = CasesList(cases, hide_inactive=self.hide_inactive) # urwid.Text("")
-        self.frame = self.draw()
-        urwid.WidgetWrap.__init__(self, self.frame)
+        self.focus_id = None
+        self.mode_switch = False
+        self.frame = OverviewScreen(self.cases, self.focus_id, self.mode_switch)
+        self._w = self.frame
+        urwid.WidgetWrap.__init__(self, self._w)
+
+    def draw(self):
+        """ returns either a FocusScreen or OverviewScreen instance """
+        global MODE_SWITCH
+        if not MODE_SWITCH:
+            self.frame = self.frame.update()
+            return self.frame
+        else:
+            if isinstance(self.frame, OverviewScreen):
+                self.frame = FocusScreen(self.focus_id)
+                MODE_SWITCH = False
+                return self.frame
+                # self._w = self.frame
+            else:
+                self.frame = OverviewScreen(self.cases, self.focus_id, self.mode_switch)
+                MODE_SWITCH = False
+                return self.frame
 
     def keypress(self, size, key):
-        # TODO sort by mode ... if self.focus_mode: ..., self.input_mode ...
-        # TODO refactor input mode and use it for filter 
-        if key == 'F' or key == 'f':
-            self.editbox = urwid.Edit(case_id_footer)
-            self.frame = self.draw(footer=lambda : self.editbox)
-            self._w = self.frame
-            self.edit_case_id = not self.edit_case_id
-
-        elif key == 'O' or key == 'o':
-            self.focus_mode = False
-            self.bodyTxt = CasesList(self.cases) # urwid.Text("")
-            self.frame = self.draw()
-            self._w = self.frame
-        elif key == 'T' or key == 't':
-            self.bodyTxt.hide_inactive = not self.bodyTxt.hide_inactive
-        elif key == 'Q' or key == 'q':
-            self.cases.running = False
-            raise urwid.ExitMainLoop()
-        elif self.edit_case_id and key != "enter":
-            self.edit_case_txt += key
-            self.editbox = urwid.Text(case_id_footer + self.edit_case_txt)
-            self.frame = self.draw(footer=lambda : self.editbox)
-            self._w = self.frame
-        elif self.edit_case_id and key == "enter":
-            self.focus_mode = True
-            self.focus_case = int(self.edit_case_txt)
-            self.bodyTxt = LogText(self.focus_case)
-            self.frame = self.draw(footer=FocusFooter)
-            self._w = self.frame
-            self.edit_case_id = not self.edit_case_id
-            self.edit_case_txt = ""
-
-
-    def draw(self, footer=OverViewFooter):
-        banner = urwid.Text(foamMonHeader, "center")
-
-        body = urwid.LineBox(self.bodyTxt)
-
-        footer = footer()
-
-        return urwid.Frame(header=banner, body=body, footer=footer)
+        """ delegates keypress to the actual screen """
+        self._w.keypress(size, key)
 
     def animate(self, loop=None, data=None):
-        # Reset counter
+        # Reset the case display number counter
         global  CASE_CTR
-        # global CASE_REFS
         CASE_CTR = 0
-        # CASE_REFS = []
-        self.bodyTxt = self.bodyTxt.update()
+
+        self.frame = self.draw() # bodyTxt.update()
+        self._w = self.frame
         self.animate_alarm = self.loop.set_alarm_in(0.01, self.animate)
 
 def cui_main():
