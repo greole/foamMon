@@ -33,12 +33,6 @@ palette = [
     ('inactive ', 'light gray', ''),
     ('change negative', 'dark red', '')]
 
-# class StatusWidget():
-
-# class CaseElem(urwid.WidgetWrap):
-#
-#     def __init__(self, text, size):
-#
 
 CASE_CTR = 0
 CASE_REFS = {}
@@ -201,14 +195,18 @@ class ScreenParent(urwid.WidgetWrap):
             self.cases.running = False
             raise urwid.ExitMainLoop()
         elif self.input_mode:
-            if key != "enter":
+            if key != "enter" and key != "backspace":
                 self.input_txt += key
                 self.input_mode_footer_txt += key
+                self._w = self.draw()
+            elif key == "backspace":
+                self.input_txt = self.input_txt[0:-1]
+                self.input_mode_footer_txt = self.input_mode_footer_txt[0:-1]
                 self._w = self.draw()
             elif "enter" in key:
                 # self.focus_mode = True
                 global FOCUS_ID
-                FOCUS_ID= int(self.input_txt)
+                FOCUS_ID= self.input_txt
                 global MODE_SWITCH
                 MODE_SWITCH = True
 
@@ -281,8 +279,8 @@ class FocusScreen(ScreenParent):
         banner = urwid.Text(foamMonHeader, "center")
         # body = urwid.LineBox(self.cases_list_frame.draw())
         body = urwid.Pile([
-            ("pack", urwid.Text(CASE_REFS[FOCUS_ID].path)),
-            ("pack", urwid.Text(CASE_REFS[FOCUS_ID].log.cache_body()))])
+            ("pack", urwid.Text(CASE_REFS[int(FOCUS_ID)].path)),
+            ("pack", urwid.Text(CASE_REFS[int(FOCUS_ID)].log.cache_body()))])
         footer = self.footer
 
         return urwid.Frame(header=banner, body=body, footer=footer)
