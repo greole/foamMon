@@ -46,7 +46,7 @@ class ProgressBar():
     def __init__(self, size, progress=0):
         self.size = size
         self.done_char = "█"
-        self.undone_char = " "
+        self.undone_char = "░"
         self.digits = [self.done_char
                 for _ in range(int(progress*size))]
         self.digits.extend([self.undone_char
@@ -59,27 +59,6 @@ class ProgressBar():
 
     def draw(self):
         return "".join(self.digits)
-
-def CasesStats():
-    """ Handle status of collection of cases to handle case ids """
-
-    # [case] sorted by id, folder, active
-
-    def __init__(self, case_explorer):
-
-        self.case_explorer = case_explorer
-
-
-    def stats(self):
-        pass
-
-    def active(self):
-        pass
-
-
-    def inactive(self):
-        pass
-
 
 
 class Cases():
@@ -252,7 +231,10 @@ class Case():
                 return 0
             r, ds, _ = next(os.walk(proc_dir))
             ds = [float(d) for d in ds if "constant" not in d]
-            return max(ds)
+            if ds:
+                return max(ds)
+            else:
+                return 0
         else:
             ts = []
             r, ds, _ = next(os.walk(self.path))
@@ -262,7 +244,10 @@ class Case():
                     ts.append(tsf)
                 except:
                     pass
-            return max(ts)
+            if ts:
+                return max(ts)
+            else:
+                return 0.0
 
     def find_recent_log_fn(self):
         try:
@@ -333,7 +318,7 @@ class Case():
             exc_info = sys.exc_info()
             return Status(
                     self,
-                    self.status_bar(digits=50),
+                    self.log.progress(self.endTime),
                     # Style.BRIGHT if self.log.active else Style.DIM,
                     50,
                     self.log.active,
@@ -378,9 +363,9 @@ class Case():
 class Status():
     """ Handle status of single case for simple printing  """
 
-    def __init__(self, case, bar, digits, active, base, name, time, wo, tl):
+    def __init__(self, case, progress, digits, active, base, name, time, wo, tl):
         self.case = case
-        self.bar = str(bar)
+        self.progress = progress
         self.digits = digits
         self.active = active
         self.base = base

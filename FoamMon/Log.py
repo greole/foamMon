@@ -1,4 +1,13 @@
 # Log.py
+import os
+import re
+import time
+
+LEN_CACHE = 10000 # max lines of log header
+LEN_CACHE_BYTES = 100*1024 # max lines of log header
+
+CACHE_HEADER = None
+CACHE_TAIL = None
 
 class Log():
 
@@ -14,6 +23,7 @@ class Log():
 
     @property
     def is_valid(self):
+        # TODO Fails on decompose logs
         if not self.path:
             return False
         if (self.Exec == "decomposePar") or (self.Exec == "blockMesh") or (self.Exec == "mapFields"):
@@ -27,7 +37,27 @@ class Log():
 
     @property
     def Exec(self):
-        return self.get_Exec(self.cached_header)
+        return self.get_header_value("exec")
+
+    @property
+    def nProcs(self):
+        return self.get_header_value("nProcs")
+
+    @property
+    def Host(self):
+        return self.get_header_value("Host")
+
+    @property
+    def build(self):
+        return self.get_header_value("build")
+
+    @property
+    def Case(self):
+        return self.get_header_value("Case")
+
+    @property
+    def PID(self):
+        return self.get_header_value("PID")
 
     @property
     def getctime(self):
@@ -59,15 +89,24 @@ class Log():
         self.cached_body = self.cache_body()
 
     def get_ClockTime(self, chunk, last=True):
-        return float(re.findall("ClockTime = ([0-9.]*) s", chunk)[-1])
+        try:
+            return float(re.findall("ClockTime = ([0-9.]*) s", chunk)[-1])
+        except:
+            return 0.0
 
 
     def get_SimTime(self, chunk):
-        return float(re.findall("\nTime = ([0-9.e\-]*)", chunk)[-1])
+        try:
+            return float(re.findall("\nTime = ([0-9.e\-]*)", chunk)[-1])
+        except:
+            return 0.0
 
-    def get_Exec(self, chunk):
-        return re.findall("Exec   : ([0-9A-Za-z]*)", chunk)[0]
-
+    def get_header_value(self, key):
+        ret =  re.findall("{: <7}: ([0-9A-Za-z]*)".format(key), self.cached_header)
+        if ret:
+            return ret[0]
+        else:
+            return None
 
     def print_log_body(self):
         sep_width = 120
@@ -105,7 +144,7 @@ class Log():
 
     @property
     def sim_speed(self):
-        return max(1e-12, self.elapsed_sim_time/self.wall_time)
+        return max(1e-12, self.elapsed_sim_time/max(1.0, self.wall_time))
 
     @property
     def is_parallel(self):
