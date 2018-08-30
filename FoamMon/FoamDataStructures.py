@@ -103,6 +103,17 @@ class Cases():
         while self.running:
             # try:
             top = self.path
+
+            c = Case(top)
+            subfold = top.split("/")[-1]
+            if c.is_valid:
+                exists = False
+                for existing in self.cases[subfold]:
+                    if c.path == existing.path:
+                        exists = True
+                if not exists:
+                    self.cases[subfold].append(c)
+
             for r, dirs, _ in os.walk(self.path):
 
                 ignore = [
@@ -120,9 +131,6 @@ class Cases():
                         if d.startswith(i):
                             dirs.remove(d)
 
-                # level = r.count(os.sep) - top.count(os.sep)
-                # if level > 2:
-                #      continue
                 for d in dirs:
                     try:
                         c = Case(os.path.join(r, d))
@@ -137,9 +145,6 @@ class Cases():
                     except Exception as e:
                         print("innner", e, r, d)
                         pass
-            # except Exception as e:
-            #     pass
-            #     print(e, r)
 
     def print_header(self, lengths):
         width_progress = lengths[0]
