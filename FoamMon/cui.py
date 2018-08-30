@@ -38,6 +38,7 @@ CASE_CTR = 0
 CASE_REFS = {}
 MODE_SWITCH = False
 FOCUS_ID = None
+FILTER = None
 
 
 class ProgressBar():
@@ -113,6 +114,35 @@ class CaseRow(urwid.WidgetWrap):
                 )
         return s
 
+class TableHeader():
+
+    def __init__(self, lengths):
+        self.lengths = lengths
+
+    @property
+    def header_text(self):
+        width_folder =  self.lengths[1] + 2
+        width_log =  self.lengths[2] + 2
+        width_time =  self.lengths[3] + 2
+        width_next_write =  max(12, self.lengths[4] + 2)
+        width_finishes =  self.lengths[5] + 2
+        # s = "{: ^{width_progress}}│"
+        s = "{: ^{width_progress}}{: ^{width_folder}}{: ^{width_log}}"
+        s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
+        s = s.format(
+                "Progress",
+                "Folder", "Logfile",
+                "Time", "Writeout", "Remaining",
+                # width_progress=width_progress,
+                width_progress=54,
+                width_folder=width_folder,
+                width_log=width_log,
+                width_time=width_time,
+                width_next_write=width_next_write,
+                width_finishes=width_finishes,
+                )
+        return s
+
 
 class DisplaySub(urwid.WidgetWrap):
 
@@ -168,7 +198,8 @@ class CasesListFrame():
     def draw(self):
         """ return a ListBox with all sub folder """
         lengths, valid_cases = self.cases.get_valid_cases()
-        items = [DisplaySub(i+1, path, elems, lengths, self.hide_inactive)
+        items = [urwid.Text(TableHeader(lengths).header_text)]
+        items += [DisplaySub(i+1, path, elems, lengths, self.hide_inactive)
             for i, (path, elems) in enumerate(valid_cases.items())]
         return urwid.ListBox(urwid.SimpleFocusListWalker(items))
 
@@ -191,6 +222,8 @@ class ScreenParent(urwid.WidgetWrap):
         return self
 
     def keypress_parent(self, size, key):
+        global FOCUS_ID
+        global FILTER
         if key == 'Q' or key == 'q':
             self.cases.running = False
             raise urwid.ExitMainLoop()
@@ -203,12 +236,17 @@ class ScreenParent(urwid.WidgetWrap):
                 self.input_txt = self.input_txt[0:-1]
                 self.input_mode_footer_txt = self.input_mode_footer_txt[0:-1]
                 self._w = self.draw()
-            elif "enter" in key:
+            elif "enter" in key and self.input_mode == "Focus":
                 # self.focus_mode = True
-                global FOCUS_ID
-                FOCUS_ID= self.input_txt
+                FOCUS_ID = self.input_txt
                 global MODE_SWITCH
                 MODE_SWITCH = True
+                FILTER = None
+                self.input_mode = False
+            elif "enter" in key and self.input_mode == "Filter":
+                # self.focus_mode = True
+                FILTER = self.input_txt
+                self.input_mode = False
 
 
 class OverviewScreen(ScreenParent):
@@ -253,7 +291,7 @@ class OverviewScreen(ScreenParent):
 
     def keypress(self, size, key):
         if key == 'F' or key == 'f':
-            self.input_mode = not self.input_mode
+            self.input_mode = "Focus"
             self._w = self.draw()
         elif key == 'T' or key == 't':
             self.hide_inactive = not self.hide_inactive
@@ -278,9 +316,10 @@ class FocusScreen(ScreenParent):
         global FOCUS_ID
         banner = urwid.Text(foamMonHeader, "center")
         # body = urwid.LineBox(self.cases_list_frame.draw())
+        global FILTER
         body = urwid.Pile([
             ("pack", urwid.Text(CASE_REFS[int(FOCUS_ID)].path)),
-            ("pack", urwid.Text(CASE_REFS[int(FOCUS_ID)].log.cache_body()))])
+            ("pack", urwid.Text(CASE_REFS[int(FOCUS_ID)].log.text(FILTER)))])
         footer = self.footer
 
         return urwid.Frame(header=banner, body=body, footer=footer)
@@ -305,7 +344,7 @@ class FocusScreen(ScreenParent):
 
     def keypress(self, size, key):
         if key == '/':
-            self.input_mode = not self.input_mode
+            self.input_mode = "Filter"
             self._w = self.draw()
         elif key == 'O' or key == 'o':
             global MODE_SWITCH
