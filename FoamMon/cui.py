@@ -343,10 +343,11 @@ class FocusScreen(ScreenParent):
             return urwid.Edit(self.input_mode_footer_txt)
 
     def keypress(self, size, key):
+        global IN
         if key == '/':
             self.input_mode = "Filter"
             self._w = self.draw()
-        elif key == 'O' or key == 'o':
+        elif key == 'O' or key == 'o' and not self.input_mode:
             global MODE_SWITCH
             MODE_SWITCH = True
         else:
