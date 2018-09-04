@@ -14,21 +14,15 @@ or directly from this repo
 
     python3 setup.py install --user
 
+or 
+
+
+    pip install foamMon
+
 
 # Usage
 
-
-To monitor the progress of multiple simulations simply run
-
-    foamMon -m
-
-in the parent directory. Furthermore to monitor a single case run
-
-    foamMon
-
-in the case directory. Filter the output of the current log by a given keyword.
-
-    foamMon --filter="Time"
+To monitor the progress of simulations simply run 'foamMon' in the parent directory.
 
 # Logfiles
 

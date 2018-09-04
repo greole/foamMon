@@ -2,37 +2,19 @@ from docopt import docopt
 from colorama import Fore, Back, Style
 # from datetime import datetime, timedelta
 import datetime
-import glob
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from copy import deepcopy
+from .Log import Log
+from .cui import foamMonHeader
 
 import sys
 
-LEN_CACHE = 10000 # max lines of log header
-LEN_CACHE_BYTES = 100*1024 # max lines of log header
-CACHE_HEADER = None
-CACHE_TAIL = None
 
 def timedelta(seconds):
     return datetime.timedelta(seconds=int(max(0, seconds)))
-
-foamMonHeader = """
-8 8888888888       ,o888888o.           .8.                   ,8.       ,8.                   ,8.       ,8.           ,o888888o.     b.             8
-8 8888          . 8888     `88.        .888.                 ,888.     ,888.                 ,888.     ,888.       . 8888     `88.   888o.          8
-8 8888         ,8 8888       `8b      :88888.               .`8888.   .`8888.               .`8888.   .`8888.     ,8 8888       `8b  Y88888o.       8
-8 8888         88 8888        `8b    . `88888.             ,8.`8888. ,8.`8888.             ,8.`8888. ,8.`8888.    88 8888        `8b .`Y888888o.    8
-8 888888888888 88 8888         88   .8. `88888.           ,8'8.`8888,8^8.`8888.           ,8'8.`8888,8^8.`8888.   88 8888         88 8o. `Y888888o. 8
-8 8888         88 8888         88  .8`8. `88888.         ,8' `8.`8888' `8.`8888.         ,8' `8.`8888' `8.`8888.  88 8888         88 8`Y8o. `Y88888o8
-8 8888         88 8888        ,8P .8' `8. `88888.       ,8'   `8.`88'   `8.`8888.       ,8'   `8.`88'   `8.`8888. 88 8888        ,8P 8   `Y8o. `Y8888
-8 8888         `8 8888       ,8P .8'   `8. `88888.     ,8'     `8.`'     `8.`8888.     ,8'     `8.`'     `8.`8888.`8 8888       ,8P  8      `Y8o. `Y8
-8 8888          ` 8888     ,88' .888888888. `88888.   ,8'       `8        `8.`8888.   ,8'       `8        `8.`8888.` 8888     ,88'   8         `Y8o.`
-8 8888             `8888888P'  .8'       `8. `88888. ,8'         `         `8.`8888. ,8'         `         `8.`8888.  `8888888P'     8            `Yo
-                                                                                                              by Gregor Olenik, go@hpsim.de, hpsim.de
-"""
 
 class ColoredProgressBar():
 
@@ -56,50 +38,53 @@ class ColoredProgressBar():
     def draw(self):
         return "".join(self.digits)
 
+class ProgressBar():
+
+
+    events = []
+
+    def __init__(self, size, progress=0):
+        self.size = size
+        self.done_char = "█"
+        self.undone_char = "░"
+        self.digits = [self.done_char
+                for _ in range(int(progress*size))]
+        self.digits.extend([self.undone_char
+                for _ in range(size - int(progress*size))])
+
+
+    def add_event(self, percentage, color):
+        index = int(percentage*self.size)
+        self.digits[index] = "█"
+
+    def draw(self):
+        return "".join(self.digits)
+
 
 class Cases():
 
     def __init__(self, path):
         self.path = path
         os.system("clear")
-        print("Searching Logfiles")
         self.cases = defaultdict(list)
         p = ThreadPoolExecutor(1)
         self.running = True
         p.submit(self.find_cases)
-        while True:
-            try:
-                case_stats = {}
-                cases = deepcopy(self.cases)
-                for r, cs in cases.items():
-                    for c in cs:
-                        if (c.log.active):
-                            c.log.refresh()
-                    case_stats[r] = {"active": [c.print_status_short() for c in cs
-                            if (c.print_status_short() and c.log.active)],
-                                "inactive": [c.print_status_short() for c in cs
-                            if (c.print_status_short() and not c.log.active)]
-                            }
 
-                lengths = self.get_max_lengths(case_stats)
-
-                os.system("clear")
-                print(foamMonHeader)
-                # print(self.cases)
-                self.print_header(lengths)
-                # print(self.cases)
-                for r, cs in case_stats.items():
-                    print("subfolder: " + os.path.basename(r))
-                    for c in cs["active"]:
-                            print(c.to_str(lengths))
-                    for c in cs["inactive"]:
-                            print(c.to_str(lengths))
-                self.print_legend()
-                time.sleep(0.2)
-            except KeyboardInterrupt:
-                print("Exiting")
-                self.running = False
-                sys.exit(0)
+    def get_valid_cases(self):
+        case_stats = {}
+        cases = deepcopy(self.cases)
+        for r, cs in cases.items():
+            for c in cs:
+                if (c.log.active):
+                    c.log.refresh()
+            case_stats[r] = {"active": [c.print_status_short() for c in cs
+                    if (c.print_status_short() and c.log.active)],
+                        "inactive": [c.print_status_short() for c in cs
+                    if (c.print_status_short() and not c.log.active)]
+                    }
+        lengths = self.get_max_lengths(case_stats)
+        return lengths, case_stats
 
     def get_max_lengths(self, statuses):
         lengths = [0 for _ in range(6)]
@@ -118,6 +103,17 @@ class Cases():
         while self.running:
             # try:
             top = self.path
+
+            c = Case(top)
+            subfold = top.split("/")[-1]
+            if c.is_valid:
+                exists = False
+                for existing in self.cases[subfold]:
+                    if c.path == existing.path:
+                        exists = True
+                if not exists:
+                    self.cases[subfold].append(c)
+
             for r, dirs, _ in os.walk(self.path):
 
                 ignore = [
@@ -135,9 +131,6 @@ class Cases():
                         if d.startswith(i):
                             dirs.remove(d)
 
-                level = r.count(os.sep) - top.count(os.sep)
-                # if level > 2:
-                #      continue
                 for d in dirs:
                     try:
                         c = Case(os.path.join(r, d))
@@ -150,11 +143,8 @@ class Cases():
                             if not exists:
                                 self.cases[subfold].append(c)
                     except Exception as e:
-                        # print("innner", e, r, d)
+                        print("innner", e, r, d)
                         pass
-            # except Exception as e:
-            #     pass
-            #     print(e, r)
 
     def print_header(self, lengths):
         width_progress = lengths[0]
@@ -163,7 +153,7 @@ class Cases():
         width_time =  lengths[3] + 2
         width_next_write =  max(12, lengths[4] + 2)
         width_finishes =  lengths[5] + 2
-        s = "{: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
+        s = "  {: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
         s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
         s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
                 width_progress=width_progress,
@@ -222,7 +212,7 @@ class Case():
         return ctDct
 
     def status_bar(self, digits=100):
-        bar = ColoredProgressBar(digits, self.log.progress(self.endTime))
+        bar = ProgressBar(digits, self.log.progress(self.endTime))
         bar.add_event(self.startSamplingPerc, Fore.YELLOW)
         return bar.draw()
 
@@ -246,7 +236,10 @@ class Case():
                 return 0
             r, ds, _ = next(os.walk(proc_dir))
             ds = [float(d) for d in ds if "constant" not in d]
-            return max(ds)
+            if ds:
+                return max(ds)
+            else:
+                return 0
         else:
             ts = []
             r, ds, _ = next(os.walk(self.path))
@@ -256,7 +249,10 @@ class Case():
                     ts.append(tsf)
                 except:
                     pass
-            return max(ts)
+            if ts:
+                return max(ts)
+            else:
+                return 0.0
 
     def find_recent_log_fn(self):
         try:
@@ -310,7 +306,6 @@ class Case():
             return (self.get_float_controlDict("writeInterval") *
                     self.get_float_controlDict("deltaT"))
 
-
     @property
     def startSampling(self):
         return self.get_float_controlDict("timeStart")
@@ -327,7 +322,8 @@ class Case():
         try:
             exc_info = sys.exc_info()
             return Status(
-                    self.status_bar(digits=50),
+                    self,
+                    self.log.progress(self.endTime),
                     # Style.BRIGHT if self.log.active else Style.DIM,
                     50,
                     self.log.active,
@@ -370,9 +366,11 @@ class Case():
 
 
 class Status():
+    """ Handle status of single case for simple printing  """
 
-    def __init__(self, bar, digits, active, base, name, time, wo, tl):
-        self.bar = str(bar)
+    def __init__(self, case, progress, digits, active, base, name, time, wo, tl):
+        self.case = case
+        self.progress = progress
         self.digits = digits
         self.active = active
         self.base = base
@@ -385,158 +383,3 @@ class Status():
     def lengths(self):
         return [self.digits, len(self.base), len(self.name),
                 len(self.time), len(self.wo), len(self.tl)]
-
-    def to_str(self, lengths):
-        width_progress = lengths[0] + 2
-        width_folder =  lengths[1] + 2
-        width_log =  lengths[2] + 2
-        width_time =  lengths[3] + 2
-        width_next_write =  max(12, lengths[4] + 2)
-        width_finishes =  lengths[5] + 2
-        style = Style.BRIGHT if self.active else Style.DIM
-        s = "{: ^{width_progress}}|"
-        s += style +  "{: ^{width_folder}}|{: ^{width_log}}|"
-        s += "{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
-        s += Style.RESET_ALL
-        s = s.format(
-                self.bar, self.base, self.name, self.time, self.wo, self.tl,
-                width_progress=width_progress,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
-        return s
-
-
-class Log():
-
-    def __init__(self, path, case):
-        self.path = path
-        self.case = case
-        if self.path:
-            self.cached_header =  self.cache_header()
-            self.cached_body = self.cache_body()
-            self.log = True
-        else:
-            self.log = False
-
-    @property
-    def is_valid(self):
-        # TODO Fails on decompose logs
-        if not self.path:
-            return False
-        if (self.Exec == "decomposePar") or (self.Exec == "blockMesh") or (self.Exec == "mapFields"):
-            return False
-        try:
-            self.get_SimTime(self.cached_body)
-            return True
-        except Exception as e:
-            # print("Invalid Log", e)
-            return False
-
-    @property
-    def Exec(self):
-        return self.get_Exec(self.cached_header)
-
-    @property
-    def getctime(self):
-        return os.path.getctime(self.path)
-
-    @property
-    def active(self):
-        if not self.log:
-            return False
-        return (time.time() - self.getctime) < 60.0
-
-    def cache_header(self):
-        """ read LEN_HEADER lines from log """
-        with open(self.path, "rb") as fh:
-            header = fh.read(LEN_CACHE_BYTES).decode('utf-8')
-            ctime = header.find("ClockTime")
-            padding = min(ctime+100, len(header))
-            header = header[0:padding] # use 100 padding chars
-            return header #.split("\n")
-
-    def cache_body(self):
-        """ read LEN_HEADER lines from log """
-        with open(self.path, "rb") as fh:
-            fh.seek(fh.tell(), os.SEEK_END)
-            fh.seek(max(0, fh.tell()-LEN_CACHE_BYTES), os.SEEK_SET)
-            return fh.read(LEN_CACHE_BYTES).decode('utf-8') #.split("\n")
-
-    def refresh(self):
-        self.cached_body = self.cache_body()
-
-    def get_ClockTime(self, chunk, last=True):
-        return float(re.findall("ClockTime = ([0-9.]*) s", chunk)[-1])
-
-
-    def get_SimTime(self, chunk):
-        return float(re.findall("\nTime = ([0-9.e\-]*)", chunk)[-1])
-
-    def get_Exec(self, chunk):
-        return re.findall("Exec   : ([0-9A-Za-z]*)", chunk)[0]
-
-
-    def print_log_body(self):
-        sep_width = 120
-        print(self.path)
-        print("="*sep_width)
-        if self.case.log_filter:
-            lines = self.cached_body.split("\n")
-            filt_lines = [l for l in lines if self.case.log_filter in l][-30:-1]
-            body_str = ("\n".join(filt_lines))
-        else:
-            body_str = ("\n".join(self.cached_body.split("\n")[-30:-1]))
-        print(body_str)
-
-    @property
-    def start_time(self):
-        return self.get_SimTime(self.cached_header)
-
-    @property
-    def sim_time(self):
-        return self.get_SimTime(self.cached_body)
-
-    @property
-    def wall_time(self):
-        return self.get_ClockTime(self.cached_body)
-
-    def remaining_sim_time(self, endtime):
-        return endtime - self.sim_time
-
-    @property
-    def elapsed_sim_time(self):
-        return self.sim_time - self.start_time
-
-    def progress(self, endtime):
-        return (self.sim_time)/endtime
-
-    @property
-    def sim_speed(self):
-        return max(1e-12, self.elapsed_sim_time/self.wall_time)
-
-    @property
-    def is_parallel(self):
-        # TODO use regex
-        for line in self.cached_header.split("\n"):
-            if 'Exec' in line and "-parallel" in line:
-                    return True
-        return False
-
-        return max(1e-12, self.elapsed_sim_time/self.wall_time)
-
-    def timeleft(self):
-        return self.time_till(self.case.endTime)
-
-    def time_till_writeout(self):
-        return self.time_till(
-                self.case.last_timestep
-              + self.case.writeInterval)
-
-    def time_till(self, end):
-        return self.remaining_sim_time(end)/(self.sim_speed)
-
-
