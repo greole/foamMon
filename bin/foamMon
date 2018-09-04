@@ -22,7 +22,9 @@ import glob
 import os
 import re
 import time
-from FoamMon import *
+# import FoamMon
+from FoamMon import cui
+
 
 def timedelta(seconds):
     return datetime.timedelta(seconds=int(max(0, seconds)))
@@ -36,19 +38,10 @@ def get_key_header(key):
             return line[delim+2:-1]
 
 
-
 def get_log_name(log="*log*"):
     return max(glob.iglob(log), key=os.path.getctime)
 
 
 if __name__ == '__main__':
 
-    arguments = docopt(__doc__, version='0.1')
-    if arguments['--multi']:
-        cases = Cases(os.getcwd())
-        cases.print_status()
-
-    else:
-        case = Case(os.getcwd(),
-                log_filter=arguments["--filter"])
-        case.print_status_full()
+    cui.cui_main()

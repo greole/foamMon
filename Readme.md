@@ -1,4 +1,5 @@
 # foamMon
+![](https://badge.fury.io/py/owls.svg)
 
 A simple tool for monitoring the progress of OpenFOAM simulations
 
@@ -14,15 +15,14 @@ or directly from this repo
 
     python3 setup.py install --user
 
-or 
-
+or
 
     pip install foamMon
 
 
 # Usage
 
-To monitor the progress of simulations simply run 'foamMon' in the parent directory.
+To monitor the progress of simulations simply run 'foamMon' in a parent directory.
 
 # Logfiles
 
