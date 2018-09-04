@@ -108,6 +108,13 @@ class Log():
         else:
             return None
 
+    def text(self, filter_):
+        lines = self.cache_body().split("\n")
+        if filter_:
+            return "\n".join([l for l in lines if filter_ in l])
+        else:
+            return "\n".join(lines)
+
     def print_log_body(self):
         sep_width = 120
         print(self.path)
