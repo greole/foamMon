@@ -26,6 +26,7 @@ config = {
     'install_requires'       : [
          'docopt',
          'colorama',
+         'urwid',
     ],
    'name'                    : 'foamMon',
    'scripts': ["bin/foamMon"]}

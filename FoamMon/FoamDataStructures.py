@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from copy import deepcopy
 from .Log import Log
-from .cui import foamMonHeader
+from .header import foamMonHeader
 
 import sys
 
