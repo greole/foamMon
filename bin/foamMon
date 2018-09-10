@@ -8,7 +8,7 @@
 
     Options:
         -h --help           Show this screen
-        -v --verbose        Print current log
+        -v --version        Print version and exit
         -m --multi          Display cases in subfolders
         --filter=key        Display only lines with given keyword
         --log=file          Use specific logfile
@@ -22,6 +22,7 @@ import glob
 import os
 import re
 import time
+import sys
 # import FoamMon
 from FoamMon import cui
 
@@ -43,5 +44,10 @@ def get_log_name(log="*log*"):
 
 
 if __name__ == '__main__':
+    arguments = docopt(__doc__)
+    if arguments.get("--version"):
+        from FoamMon.version import __version__
+        print(__version__)
+        sys.exit(0)
 
     cui.cui_main()
