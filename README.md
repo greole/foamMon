@@ -19,6 +19,15 @@ or
 
     pip install foamMon
 
+## Ubuntu
+
+If installing under ubuntu with user privileges make sure that
+'$HOME/.local/bin' is added to your '$PATH'. If necessary
+add
+
+    export PATH=$PATH:$HOME/.local/bin
+
+to your ~/.bashrc file
 
 # Usage
 
