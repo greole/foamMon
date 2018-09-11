@@ -381,7 +381,7 @@ class LogMonFrame(urwid.WidgetWrap):
 
         self.frame = self.draw() # bodyTxt.update()
         self._w = self.frame
-        self.animate_alarm = self.loop.set_alarm_in(0.01, self.animate)
+        self.animate_alarm = self.loop.set_alarm_in(1.0/30.0, self.animate)
 
 def cui_main():
 
