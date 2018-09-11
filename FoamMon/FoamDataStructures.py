@@ -66,6 +66,7 @@ class Cases():
     def __init__(self, path):
         self.path = path
         os.system("clear")
+        self.mdates = {}
         self.cases = defaultdict(list)
         p = ThreadPoolExecutor(1)
         self.running = True
@@ -101,7 +102,9 @@ class Cases():
     def find_cases(self):
 
         while self.running:
-            # try:
+            # TODO store modification dates and traverse only
+            # on updated folder
+
             top = self.path
 
             c = Case(top)
@@ -113,6 +116,16 @@ class Cases():
                         exists = True
                 if not exists:
                     self.cases[subfold].append(c)
+
+            root_mdate = False
+
+            # rescan only if not scanned before or folder has changed
+            if root_mdate and os.path.getmtime(top) <= root_mdate:
+                # wait 10 seconds
+                time.sleep(10)
+                continue
+
+            root_mdate = os.path.getmtime(top)
 
             for r, dirs, _ in os.walk(self.path):
 
@@ -130,6 +143,10 @@ class Cases():
                     for i in ignore:
                         if d.startswith(i):
                             dirs.remove(d)
+                    full_path =  os.path.join(r, d)
+                    last_mdate = self.mdates.get(full_path)
+                    if last_mdate and last_mdate >= os.path.getmtime(full_path):
+                        dirs.remove(d)
 
                 for d in dirs:
                     try:
@@ -141,10 +158,13 @@ class Cases():
                                 if c.path == existing.path:
                                     exists = True
                             if not exists:
+                                full_path =  os.path.join(r, d)
+                                self.mdates[full_path] = os.path.getmtime(full_path)
                                 self.cases[subfold].append(c)
                     except Exception as e:
                         print("innner", e, r, d)
                         pass
+                time.sleep(30)
 
     def print_header(self, lengths):
         width_progress = lengths[0]
