@@ -282,7 +282,7 @@ class OverviewScreen(ScreenParent):
             self.input_mode = "Focus"
             self._w = self.draw()
         elif key == 'T' or key == 't':
-            self.hide_inactive = not self.hide_inactive
+            self.cases_list_frame.toggle_hide()
             self._w = self.draw()
         else:
             self.keypress_parent(size, key)
