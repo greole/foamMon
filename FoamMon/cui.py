@@ -282,7 +282,7 @@ class OverviewScreen(ScreenParent):
             self.input_mode = "Focus"
             self._w = self.draw()
         elif key == 'T' or key == 't':
-            self.hide_inactive = not self.hide_inactive
+            self.cases_list_frame.toggle_hide()
             self._w = self.draw()
         else:
             self.keypress_parent(size, key)
@@ -381,7 +381,7 @@ class LogMonFrame(urwid.WidgetWrap):
 
         self.frame = self.draw() # bodyTxt.update()
         self._w = self.frame
-        self.animate_alarm = self.loop.set_alarm_in(0.01, self.animate)
+        self.animate_alarm = self.loop.set_alarm_in(1.0/30.0, self.animate)
 
 def cui_main():
 
