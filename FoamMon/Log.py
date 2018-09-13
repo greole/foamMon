@@ -168,7 +168,7 @@ class Log():
 
     def time_till_writeout(self):
         return self.time_till(
-                self.case.last_timestep
+                self.case.last_timestep_ondisk
               + self.case.writeInterval)
 
     def time_till(self, end):
