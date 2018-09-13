@@ -388,7 +388,7 @@ def cui_main():
     cases = Cases(os.getcwd())
 
     frame = LogMonFrame(cases)
-    mainloop = urwid.MainLoop(frame, palette)
+    mainloop = urwid.MainLoop(frame, palette, handle_mouse=False)
     mainloop.screen.set_terminal_properties(colors=256)
     frame.loop = mainloop
     frame.animate()
