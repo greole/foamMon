@@ -7,6 +7,8 @@ import threading
 import time
 import datetime
 
+import cProfile, pstats
+
 # Set up color scheme
 palette = [
     ('titlebar', 'dark red', ''),
@@ -27,6 +29,7 @@ CASE_REFS = {}
 MODE_SWITCH = False
 FOCUS_ID = None
 FILTER = None
+FPS = 1.0
 
 
 class ProgressBar():
@@ -356,6 +359,7 @@ class LogMonFrame(urwid.WidgetWrap):
     def draw(self):
         """ returns either a FocusScreen or OverviewScreen instance """
         global MODE_SWITCH
+        global FPS
         if not MODE_SWITCH:
             self.frame = self.frame.update()
             return self.frame
@@ -363,10 +367,12 @@ class LogMonFrame(urwid.WidgetWrap):
             if isinstance(self.frame, OverviewScreen):
                 self.frame = FocusScreen(self.focus_id)
                 MODE_SWITCH = False
+                FPS = 30.0
                 return self.frame
                 # self._w = self.frame
             else:
                 self.frame = OverviewScreen(self.cases, self.focus_id, self.mode_switch)
+                FPS = 1.0
                 MODE_SWITCH = False
                 return self.frame
 
@@ -381,9 +387,13 @@ class LogMonFrame(urwid.WidgetWrap):
 
         self.frame = self.draw() # bodyTxt.update()
         self._w = self.frame
-        self.animate_alarm = self.loop.set_alarm_in(1.0/30.0, self.animate)
+        global FPS
+        self.animate_alarm = self.loop.set_alarm_in(1.0/FPS, self.animate)
 
 def cui_main():
+
+    # pr = cProfile.Profile()
+    # pr.enable()  # start profilin
 
     cases = Cases(os.getcwd())
 
@@ -393,4 +403,9 @@ def cui_main():
     frame.loop = mainloop
     frame.animate()
     mainloop.run()
+
+    # pr.disable()  # end profiling
+    # sortby = 'cumulative'
+    # ps = pstats.Stats(pr).sort_stats(sortby)
+    # ps.print_stats()
 
