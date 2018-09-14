@@ -1,5 +1,5 @@
 # foamMon
-![](https://badge.fury.io/py/owls.svg)
+![](https://badge.fury.io/py/foamMon.svg)
 ![](https://travis-ci.org/greole/foamMon.svg?branch=master)
 
 
