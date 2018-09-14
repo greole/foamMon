@@ -249,7 +249,7 @@ class Case():
        return list(zip(ctimes, files))
 
     @property
-    def last_timestep(self):
+    def last_timestep_ondisk(self):
         if self.log.is_parallel:
             proc_dir = os.path.join(self.path, "processor0")
             if not os.path.exists(proc_dir):
