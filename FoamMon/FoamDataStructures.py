@@ -3,6 +3,11 @@ from colorama import Fore, Back, Style
 # from datetime import datetime, timedelta
 import datetime
 import os
+try:
+        from walk import walk
+except ImportError:
+        from os import walk
+
 import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
@@ -68,9 +73,9 @@ class Cases():
         os.system("clear")
         self.mdates = {}
         self.cases = defaultdict(list)
-        p = ThreadPoolExecutor(1)
+        self.p = ThreadPoolExecutor(1)
         self.running = True
-        p.submit(self.find_cases)
+        self.future = self.p.submit(self.find_cases)
 
     def get_valid_cases(self):
         case_stats = {}
@@ -122,12 +127,15 @@ class Cases():
             # rescan only if not scanned before or folder has changed
             if root_mdate and os.path.getmtime(top) <= root_mdate:
                 # wait 10 seconds
-                time.sleep(10)
+                for i in range(10):
+                    if not self.running:
+                        return
+                    time.sleep(10)
                 continue
 
             root_mdate = os.path.getmtime(top)
 
-            for r, dirs, _ in os.walk(self.path):
+            for r, dirs, _ in walk(self.path):
 
                 ignore = [
                     "boundaryData",
@@ -145,7 +153,7 @@ class Cases():
                             dirs.remove(d)
                     full_path =  os.path.join(r, d)
                     last_mdate = self.mdates.get(full_path)
-                    if last_mdate and last_mdate >= os.path.getmtime(full_path):
+                    if last_mdate and os.path.getmtime(full_path) <= last_mdate:
                         dirs.remove(d)
 
                 for d in dirs:
@@ -164,7 +172,12 @@ class Cases():
                     except Exception as e:
                         print("innner", e, r, d)
                         pass
-                time.sleep(30)
+
+            for i in range(10):
+                if not self.running:
+                    return
+                time.sleep(1)
+
 
     def print_header(self, lengths):
         width_progress = lengths[0]
@@ -240,7 +253,7 @@ class Case():
     def find_logs(self, log_format):
        """ returns a list of filenames and ctimes """
        # print(self.path)
-       r, d, files = next(os.walk(self.path))
+       r, d, files = next(walk(self.path))
        # TODO use regex to find logs
        files = list(filter(lambda x: log_format in x, files))
        files = [os.path.join(r, f) for f in files]
@@ -254,7 +267,7 @@ class Case():
             proc_dir = os.path.join(self.path, "processor0")
             if not os.path.exists(proc_dir):
                 return 0
-            r, ds, _ = next(os.walk(proc_dir))
+            r, ds, _ = next(walk(proc_dir))
             ds = [float(d) for d in ds if "constant" not in d]
             if ds:
                 return max(ds)
@@ -262,7 +275,7 @@ class Case():
                 return 0
         else:
             ts = []
-            r, ds, _ = next(os.walk(self.path))
+            r, ds, _ = next(walk(self.path))
             for t in ds:
                 try:
                     tsf = float(t)
