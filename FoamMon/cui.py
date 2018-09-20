@@ -8,6 +8,7 @@ import time
 import datetime
 
 import cProfile, pstats
+import sys
 
 # Set up color scheme
 palette = [
@@ -30,6 +31,7 @@ MODE_SWITCH = False
 FOCUS_ID = None
 FILTER = None
 FPS = 1.0
+COLUMNS = []
 
 
 class ProgressBar():
@@ -58,6 +60,20 @@ class ProgressBar():
     def render(self):
         return urwid.Text(self.digits)
 
+class CaseColumn():
+
+    def __init__(self, name, length, reference):
+        self.name = name
+        self.length = length
+        self.reference = reference
+
+    def get(self):
+        return "{: ^{length}}".format(
+                getattr(self.reference, self.name), length=self.length+2)
+
+    def getName(self):
+        return "{: ^{length}}".format(self.name, length=self.length+2)
+
 
 class CaseRow(urwid.WidgetWrap):
 
@@ -68,6 +84,7 @@ class CaseRow(urwid.WidgetWrap):
         self.lengths = length
         global CASE_CTR
         global CASE_REFS
+        global COLUMNS
         CASE_CTR +=  1
         self.Id = CASE_CTR
         CASE_REFS[int(self.Id)] = self.case.case
@@ -77,6 +94,22 @@ class CaseRow(urwid.WidgetWrap):
         bar = ProgressBar(50, self.case.progress)
         bar.add_event(self.case.case.startSamplingPerc, "sampling")
         bar = bar.render()
+        # TODO refactor case methods to be consistent with table header
+        # base = folder
+        # name = logfile
+        # time = time
+        # wo = writeout
+        # tl = remaining
+        self.columns = [CaseColumn(name, length, self.case)
+                for i, (name, length) in
+                enumerate(zip(["base", "name", "time", "wo", "tl"],
+                    [self.lengths[1], self.lengths[2],
+                     self.lengths[3], self.lengths[4],
+                     self.lengths[5]],
+                    ))
+                if COLUMNS[i+1]
+                ]
+
         urwid.WidgetWrap.__init__(self, urwid.Columns(
             [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id)))),
                 ("pack", bar),
@@ -84,54 +117,31 @@ class CaseRow(urwid.WidgetWrap):
 
     @property
     def status_text(self):
-        width_folder =  self.lengths[1] + 2
-        width_log =  self.lengths[2] + 2
-        width_time =  self.lengths[3] + 2
-        width_next_write =  max(12, self.lengths[4] + 2)
-        width_finishes =  self.lengths[5] + 2
-        # s = "{: ^{width_progress}}│"
-        s = "{: ^{width_folder}}{: ^{width_log}}"
-        s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
-        s = s.format(
-                # index,
-                self.case.base, self.case.name,
-                self.case.time, self.case.wo, self.case.tl,
-                # width_progress=width_progress,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
+        s = "".join([c.get() for c in self.columns])
         return s
 
 class TableHeader():
+    # TODO create a base class
 
     def __init__(self, lengths):
         self.lengths = lengths
+        global COLUMNS
+        columns = [True] + COLUMNS
+        self.columns = [CaseColumn(name, length, None)
+                for i, (name, length) in
+                enumerate(zip(
+                    ["progressbar", "folder", "logfile", "time", "writeout", "remaining"],
+                    [self.lengths[0],
+                     self.lengths[1], self.lengths[2],
+                     self.lengths[3], self.lengths[4],
+                     self.lengths[5]],
+                    ))
+                if columns[i]
+                ]
 
     @property
     def header_text(self):
-        width_folder =  self.lengths[1] + 2
-        width_log =  self.lengths[2] + 2
-        width_time =  self.lengths[3] + 2
-        width_next_write =  max(12, self.lengths[4] + 2)
-        width_finishes =  self.lengths[5] + 2
-        # s = "{: ^{width_progress}}│"
-        s = "{: ^{width_progress}}{: ^{width_folder}}{: ^{width_log}}"
-        s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
-        s = s.format(
-                "Progress",
-                "Folder", "Logfile",
-                "Time", "Writeout", "Remaining",
-                # width_progress=width_progress,
-                width_progress=54,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
+        s = "".join([c.getName() for c in self.columns])
         return s
 
 
@@ -179,8 +189,8 @@ class DisplaySub(urwid.WidgetWrap):
         self._w = self.draw()
         return self
 
-class CasesListFrame():
 
+class CasesListFrame():
 
     def __init__(self, cases, hide_inactive):
         self.cases = cases
@@ -218,6 +228,7 @@ class ScreenParent(urwid.WidgetWrap):
         if key == 'Q' or key == 'q':
             self.cases.running = False
             raise urwid.ExitMainLoop()
+            # sys.exit(1)
         elif self.input_mode:
             if key != "enter" and key != "backspace":
                 self.input_txt += key
@@ -390,12 +401,19 @@ class LogMonFrame(urwid.WidgetWrap):
         global FPS
         self.animate_alarm = self.loop.set_alarm_in(1.0/FPS, self.animate)
 
-def cui_main():
+def cui_main(arguments):
 
     # pr = cProfile.Profile()
     # pr.enable()  # start profilin
 
     cases = Cases(os.getcwd())
+
+
+    global COLUMNS
+    COLUMNS = [arguments.get("--" + c, True)
+               for c in ["progressbar", "folder", "logfile",
+                   "time", "writeout", "remaining"]
+            ]
 
     frame = LogMonFrame(cases)
     mainloop = urwid.MainLoop(frame, palette, handle_mouse=False)
