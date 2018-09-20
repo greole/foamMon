@@ -15,6 +15,7 @@ class Log():
         self.path = path
         self.case = case
         if self.path:
+            self.mdate = os.path.getmtime(self.path)
             self.cached_header =  self.cache_header()
             self.cached_body = self.cache_body()
             self.log = True
@@ -86,7 +87,10 @@ class Log():
             return fh.read(LEN_CACHE_BYTES).decode('utf-8') #.split("\n")
 
     def refresh(self):
-        self.cached_body = self.cache_body()
+        cur_mdate = os.path.getmtime(self.path)
+        if self.mdate < cur_mdate:
+            self.cached_body = self.cache_body()
+            self.mdate = cur_mdate
 
     def get_ClockTime(self, chunk, last=True):
         try:
@@ -168,7 +172,7 @@ class Log():
 
     def time_till_writeout(self):
         return self.time_till(
-                self.case.last_timestep
+                self.case.last_timestep_ondisk
               + self.case.writeInterval)
 
     def time_till(self, end):

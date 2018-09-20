@@ -1,5 +1,7 @@
 # foamMon
-![](https://badge.fury.io/py/owls.svg)
+![](https://badge.fury.io/py/foamMon.svg)
+![](https://travis-ci.org/greole/foamMon.svg?branch=master)
+
 
 A simple tool for monitoring the progress of OpenFOAM simulations
 
