@@ -2,7 +2,7 @@ import urwid
 
 from .header import foamMonHeader
 import os
-from .FoamDataStructures import Cases
+from .FoamDataStructures import Cases, default_elements
 import threading
 import time
 import datetime
@@ -31,7 +31,8 @@ MODE_SWITCH = False
 FOCUS_ID = None
 FILTER = None
 FPS = 1.0
-COLUMNS = []
+# TODO use COLUMNS for column width
+COLUMNS = {}
 
 
 class ProgressBar():
@@ -60,6 +61,23 @@ class ProgressBar():
     def render(self):
         return urwid.Text(self.digits)
 
+class TableHeader():
+    # TODO create a base class
+
+    def __init__(self, lengths):
+        self.lengths = lengths
+        global COLUMNS
+        self.columns = [CaseColumn(name, self.lengths.get(name, 20), None)
+                for name in default_elements
+                if COLUMNS[name]
+                ]
+
+    @property
+    def header_text(self):
+        s = "".join([c.getName() for c in self.columns])
+        return s
+
+
 class CaseColumn():
 
     def __init__(self, name, length, reference):
@@ -68,8 +86,15 @@ class CaseColumn():
         self.reference = reference
 
     def get(self):
+        if self.name == "progressbar":
+            return self.bar()
         return "{: ^{length}}".format(
                 getattr(self.reference, self.name), length=self.length+2)
+
+    def bar(self):
+        bar = ProgressBar(50, self.reference.progress)
+        bar.add_event(self.reference.case.startSamplingPerc, "sampling")
+        return  bar.draw()
 
     def getName(self):
         return "{: ^{length}}".format(self.name, length=self.length+2)
@@ -84,64 +109,34 @@ class CaseRow(urwid.WidgetWrap):
         self.lengths = length
         global CASE_CTR
         global CASE_REFS
-        global COLUMNS
         CASE_CTR +=  1
         self.Id = CASE_CTR
         CASE_REFS[int(self.Id)] = self.case.case
 
         mode_text = "active" if self.active else "inactive"
-
-        bar = ProgressBar(50, self.case.progress)
-        bar.add_event(self.case.case.startSamplingPerc, "sampling")
-        bar = bar.render()
         # TODO refactor case methods to be consistent with table header
         # base = folder
         # name = logfile
         # time = time
         # wo = writeout
         # tl = remaining
-        self.columns = [CaseColumn(name, length, self.case)
-                for i, (name, length) in
-                enumerate(zip(["base", "name", "time", "wo", "tl"],
-                    [self.lengths[1], self.lengths[2],
-                     self.lengths[3], self.lengths[4],
-                     self.lengths[5]],
-                    ))
-                if COLUMNS[i+1]
-                ]
+        global COLUMNS
+        if self.case:
+            self.columns = [CaseColumn(name, self.lengths.get(name, 20), self.case)
+                    for name in default_elements
+                    if COLUMNS[name]
+                    ]
+        else:
+            self.columns = []
 
         urwid.WidgetWrap.__init__(self, urwid.Columns(
             [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id)))),
-                ("pack", bar),
+                # ("pack", bar),
                 ("pack", urwid.Text((mode_text, self.status_text)))]))
 
     @property
     def status_text(self):
         s = "".join([c.get() for c in self.columns])
-        return s
-
-class TableHeader():
-    # TODO create a base class
-
-    def __init__(self, lengths):
-        self.lengths = lengths
-        global COLUMNS
-        columns = [True] + COLUMNS
-        self.columns = [CaseColumn(name, length, None)
-                for i, (name, length) in
-                enumerate(zip(
-                    ["progressbar", "folder", "logfile", "time", "writeout", "remaining"],
-                    [self.lengths[0],
-                     self.lengths[1], self.lengths[2],
-                     self.lengths[3], self.lengths[4],
-                     self.lengths[5]],
-                    ))
-                if columns[i]
-                ]
-
-    @property
-    def header_text(self):
-        s = "".join([c.getName() for c in self.columns])
         return s
 
 
@@ -408,12 +403,11 @@ def cui_main(arguments):
 
     cases = Cases(os.getcwd())
 
-
     global COLUMNS
-    COLUMNS = [arguments.get("--" + c, True)
+    COLUMNS = {c: False if arguments.get("--" + c) == "False" else True
                for c in ["progressbar", "folder", "logfile",
                    "time", "writeout", "remaining"]
-            ]
+            }
 
     frame = LogMonFrame(cases)
     mainloop = urwid.MainLoop(frame, palette, handle_mouse=False)

@@ -21,6 +21,9 @@ import sys
 def timedelta(seconds):
     return datetime.timedelta(seconds=int(max(0, seconds)))
 
+
+default_elements = ["progressbar", "folder", "logfile", "time", "writeout", "remaining"]
+
 class ColoredProgressBar():
 
 
@@ -93,15 +96,15 @@ class Cases():
         return lengths, case_stats
 
     def get_max_lengths(self, statuses):
-        lengths = [0 for _ in range(6)]
+        lengths = {element: 0 for element in default_elements}
         for n, folder in statuses.items():
             for s in folder.get("active", []):
-                for i in range(len(lengths)):
-                    lengths[i] = max(lengths[i], s.lengths[i])
+                for elem in lengths.keys():
+                    lengths[elem] = max(lengths[elem], s.lengths[elem])
 
             for s in folder.get("inactive", []):
-                for i in range(len(lengths)):
-                    lengths[i] = max(lengths[i], s.lengths[i])
+                for elem in lengths.keys():
+                    lengths[elem] = max(lengths[elem], s.lengths[elem])
         return lengths
 
     def find_cases(self):
@@ -179,24 +182,24 @@ class Cases():
                 time.sleep(1)
 
 
-    def print_header(self, lengths):
-        width_progress = lengths[0]
-        width_folder =  lengths[1] + 2
-        width_log =  lengths[2] + 2
-        width_time =  lengths[3] + 2
-        width_next_write =  max(12, lengths[4] + 2)
-        width_finishes =  lengths[5] + 2
-        s = "  {: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
-        s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
-        s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
-                width_progress=width_progress,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
-        print(s)
+    # def print_header(self, lengths):
+    #     width_progress = lengths[0]
+    #     width_folder =  lengths[1] + 2
+    #     width_log =  lengths[2] + 2
+    #     width_time =  lengths[3] + 2
+    #     width_next_write =  max(12, lengths[4] + 2)
+    #     width_finishes =  lengths[5] + 2
+    #     s = "  {: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
+    #     s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
+    #     s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
+    #             width_progress=width_progress,
+    #             width_folder=width_folder,
+    #             width_log=width_log,
+    #             width_time=width_time,
+    #             width_next_write=width_next_write,
+    #             width_finishes=width_finishes,
+    #             )
+    #     print(s)
 
     def print_legend(self):
         s = "\nLegend: "
@@ -217,7 +220,7 @@ class Case():
 
     def __init__(self, path, log_format="log", summary=False, log_filter=None):
         self.path = path
-        self.basename = os.path.basename(self.path)
+        self.folder = os.path.basename(self.path)
         self.log_format = log_format
         self.log_fns = self.find_logs(self.log_format)
         self.log = Log(self.find_recent_log_fn(), self)
@@ -360,7 +363,7 @@ class Case():
                     # Style.BRIGHT if self.log.active else Style.DIM,
                     50,
                     self.log.active,
-                    self.basename,
+                    self.folder,
                     os.path.basename(self.log.path),
                     self.log.sim_time,
                     timedelta(self.log.time_till_writeout()),
@@ -401,18 +404,25 @@ class Case():
 class Status():
     """ Handle status of single case for simple printing  """
 
-    def __init__(self, case, progress, digits, active, base, name, time, wo, tl):
+    def __init__(self, case, progress, digits, active, folder, logfile, time, writeout, remaining):
         self.case = case
         self.progress = progress
         self.digits = digits
         self.active = active
-        self.base = base
-        self.name = name
+        self.folder = folder
+        self.logfile = logfile
         self.time = str(time)
-        self.wo = str(wo)
-        self.tl = str(tl)
+        self.writeout = str(writeout)
+        self.remaining = str(remaining)
 
     @property
     def lengths(self):
-        return [self.digits, len(self.base), len(self.name),
-                len(self.time), len(self.wo), len(self.tl)]
+        """ returns the lengths of the returned strings """
+        return {"progressbar": self.digits,
+                "folder": len(self.folder),
+                "logfile": len(self.logfile),
+                "time": len(self.time),
+                "writeout": len(self.writeout),
+                "remaining": len(self.remaining),
+                }
+
