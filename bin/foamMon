@@ -29,22 +29,6 @@ import sys
 # import FoamMon
 from FoamMon import cui
 
-
-# def timedelta(seconds):
-#     return datetime.timedelta(seconds=int(max(0, seconds)))
-#
-
-# def get_key_header(key):
-#     """ check header for given key """
-#     for line in CACHE_HEADER:
-#         if key in line:
-#             delim = line.find(':')
-#             return line[delim+2:-1]
-#
-
-# def get_log_name(log="*log*"):
-#     return max(glob.iglob(log), key=os.path.getctime)
-
 if __name__ == '__main__':
     arguments = docopt(__doc__)
     if arguments.get("--version"):
