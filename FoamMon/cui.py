@@ -85,16 +85,21 @@ class CaseColumn():
         self.length = length
         self.reference = reference
 
-    def get(self):
-        if self.name == "progressbar":
-            return self.bar()
-        return "{: ^{length}}".format(
-                getattr(self.reference, self.name), length=self.length+2)
+    def get_pack(self, mode):
+        if isinstance(self.name, str):
+            if self.name == "progressbar":
+                return ("pack", urwid.Text(self.bar()))
+            return ("pack", urwid.Text((mode, "{: ^{length}}".format(
+                    getattr(self.reference, self.name), length=self.length+2))))
+        else:
+            return ("pack", urwid.Text((mode, "{: ^{length}}".format(
+                    self.reference.custom_filter(self.name[1]),
+                        length=self.length+2))))
 
     def bar(self):
         bar = ProgressBar(50, self.reference.progress)
         bar.add_event(self.reference.case.startSamplingPerc, "sampling")
-        return  bar.draw()
+        return bar.digits
 
     def getName(self):
         return "{: ^{length}}".format(self.name, length=self.length+2)
@@ -114,30 +119,25 @@ class CaseRow(urwid.WidgetWrap):
         CASE_REFS[int(self.Id)] = self.case.case
 
         mode_text = "active" if self.active else "inactive"
-        # TODO refactor case methods to be consistent with table header
-        # base = folder
-        # name = logfile
-        # time = time
-        # wo = writeout
-        # tl = remaining
         global COLUMNS
         if self.case:
             self.columns = [CaseColumn(name, self.lengths.get(name, 20), self.case)
                     for name in default_elements
                     if COLUMNS[name]
                     ]
+            self.columns += [CaseColumn(name, 20, self.case)
+                    for name in [["Temperature", 
+                       "T gas min/max  = ([0-9,. ]*)"]]]
+
         else:
             self.columns = []
 
         urwid.WidgetWrap.__init__(self, urwid.Columns(
-            [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id)))),
-                # ("pack", bar),
-                ("pack", urwid.Text((mode_text, self.status_text)))]))
+            [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id))))]
+            + self.status_packs(mode_text)))
 
-    @property
-    def status_text(self):
-        s = "".join([c.get() for c in self.columns])
-        return s
+    def status_packs(self, mode):
+        return [c.get_pack(mode) for c in self.columns]
 
 
 class DisplaySub(urwid.WidgetWrap):
@@ -408,6 +408,8 @@ def cui_main(arguments):
                for c in ["progressbar", "folder", "logfile",
                    "time", "writeout", "remaining"]
             }
+
+    FILTER = arguments.get("--custom_filter")
 
     frame = LogMonFrame(cases)
     mainloop = urwid.MainLoop(frame, palette, handle_mouse=False)
