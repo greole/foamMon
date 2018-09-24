@@ -9,6 +9,7 @@ import datetime
 
 import cProfile, pstats
 import sys
+import json
 
 # Set up color scheme
 palette = [
@@ -33,6 +34,7 @@ FILTER = None
 FPS = 1.0
 # TODO use COLUMNS for column width
 COLUMNS = {}
+FILTER = {}
 
 
 class ProgressBar():
@@ -120,14 +122,16 @@ class CaseRow(urwid.WidgetWrap):
 
         mode_text = "active" if self.active else "inactive"
         global COLUMNS
+        global FILTER
         if self.case:
             self.columns = [CaseColumn(name, self.lengths.get(name, 20), self.case)
                     for name in default_elements
                     if COLUMNS[name]
                     ]
-            self.columns += [CaseColumn(name, 20, self.case)
-                    for name in [["Temperature", 
-                       "T gas min/max  = ([0-9,. ]*)"]]]
+            self.columns += [CaseColumn(el, 20, self.case) for el in FILTER.items()]
+
+                       #  ["Temperature",
+                       # "T gas min/max  = ([0-9,. ]*)"]]]
 
         else:
             self.columns = []
@@ -409,7 +413,8 @@ def cui_main(arguments):
                    "time", "writeout", "remaining"]
             }
 
-    FILTER = arguments.get("--custom_filter")
+    global FILTER
+    FILTER = json.loads(arguments.get("--custom_filter"))
 
     frame = LogMonFrame(cases)
     mainloop = urwid.MainLoop(frame, palette, handle_mouse=False)
