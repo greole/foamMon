@@ -2,10 +2,14 @@ import urwid
 
 from .header import foamMonHeader
 import os
-from .FoamDataStructures import Cases
+from .FoamDataStructures import Cases, default_elements
 import threading
 import time
 import datetime
+
+import cProfile, pstats
+import sys
+import json
 
 # Set up color scheme
 palette = [
@@ -27,6 +31,10 @@ CASE_REFS = {}
 MODE_SWITCH = False
 FOCUS_ID = None
 FILTER = None
+FPS = 1.0
+# TODO use COLUMNS for column width
+COLUMNS = {}
+FILTER = {}
 
 
 class ProgressBar():
@@ -55,6 +63,51 @@ class ProgressBar():
     def render(self):
         return urwid.Text(self.digits)
 
+class TableHeader():
+    # TODO create a base class
+
+    def __init__(self, lengths):
+        self.lengths = lengths
+        global COLUMNS
+        global FILTER
+        self.columns = [CaseColumn(name, self.lengths.get(name, 20), None)
+                for name in default_elements
+                if COLUMNS[name]
+                ]
+        self.columns += [CaseColumn(el, 20, None) for el in FILTER.keys()]
+
+    @property
+    def header_text(self):
+        s = "".join([c.getName() for c in self.columns])
+        return s
+
+
+class CaseColumn():
+
+    def __init__(self, name, length, reference):
+        self.name = name
+        self.length = length
+        self.reference = reference
+
+    def get_pack(self, mode):
+        if isinstance(self.name, str):
+            if self.name == "progressbar":
+                return ("pack", urwid.Text(self.bar()))
+            return ("pack", urwid.Text((mode, "{: ^{length}}".format(
+                    getattr(self.reference, self.name), length=self.length+2))))
+        else:
+            return ("pack", urwid.Text((mode, "{: ^{length}}".format(
+                    self.reference.custom_filter(self.name[1]),
+                        length=self.length+2))))
+
+    def bar(self):
+        bar = ProgressBar(50, self.reference.progress)
+        bar.add_event(self.reference.case.startSamplingPerc, "sampling")
+        return bar.digits
+
+    def getName(self):
+        return "{: ^{length}}".format(self.name, length=self.length+2)
+
 
 class CaseRow(urwid.WidgetWrap):
 
@@ -70,66 +123,27 @@ class CaseRow(urwid.WidgetWrap):
         CASE_REFS[int(self.Id)] = self.case.case
 
         mode_text = "active" if self.active else "inactive"
+        global COLUMNS
+        global FILTER
+        if self.case:
+            self.columns = [CaseColumn(name, self.lengths.get(name, 20), self.case)
+                    for name in default_elements
+                    if COLUMNS[name]
+                    ]
+            self.columns += [CaseColumn(el, 20, self.case) for el in FILTER.items()]
 
-        bar = ProgressBar(50, self.case.progress)
-        bar.add_event(self.case.case.startSamplingPerc, "sampling")
-        bar = bar.render()
+                       #  ["Temperature",
+                       # "T gas min/max  = ([0-9,. ]*)"]]]
+
+        else:
+            self.columns = []
+
         urwid.WidgetWrap.__init__(self, urwid.Columns(
-            [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id)))),
-                ("pack", bar),
-                ("pack", urwid.Text((mode_text, self.status_text)))]))
+            [("pack", urwid.Text((mode_text, "{: ^2} ".format(self.Id))))]
+            + self.status_packs(mode_text)))
 
-    @property
-    def status_text(self):
-        width_folder =  self.lengths[1] + 2
-        width_log =  self.lengths[2] + 2
-        width_time =  self.lengths[3] + 2
-        width_next_write =  max(12, self.lengths[4] + 2)
-        width_finishes =  self.lengths[5] + 2
-        # s = "{: ^{width_progress}}│"
-        s = "{: ^{width_folder}}{: ^{width_log}}"
-        s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
-        s = s.format(
-                # index,
-                self.case.base, self.case.name,
-                self.case.time, self.case.wo, self.case.tl,
-                # width_progress=width_progress,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
-        return s
-
-class TableHeader():
-
-    def __init__(self, lengths):
-        self.lengths = lengths
-
-    @property
-    def header_text(self):
-        width_folder =  self.lengths[1] + 2
-        width_log =  self.lengths[2] + 2
-        width_time =  self.lengths[3] + 2
-        width_next_write =  max(12, self.lengths[4] + 2)
-        width_finishes =  self.lengths[5] + 2
-        # s = "{: ^{width_progress}}│"
-        s = "{: ^{width_progress}}{: ^{width_folder}}{: ^{width_log}}"
-        s += "{: ^{width_time}}{: ^{width_next_write}}{: ^{width_finishes}}"
-        s = s.format(
-                "Progress",
-                "Folder", "Logfile",
-                "Time", "Writeout", "Remaining",
-                # width_progress=width_progress,
-                width_progress=54,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
-        return s
+    def status_packs(self, mode):
+        return [c.get_pack(mode) for c in self.columns]
 
 
 class DisplaySub(urwid.WidgetWrap):
@@ -176,8 +190,8 @@ class DisplaySub(urwid.WidgetWrap):
         self._w = self.draw()
         return self
 
-class CasesListFrame():
 
+class CasesListFrame():
 
     def __init__(self, cases, hide_inactive):
         self.cases = cases
@@ -215,6 +229,7 @@ class ScreenParent(urwid.WidgetWrap):
         if key == 'Q' or key == 'q':
             self.cases.running = False
             raise urwid.ExitMainLoop()
+            # sys.exit(1)
         elif self.input_mode:
             if key != "enter" and key != "backspace":
                 self.input_txt += key
@@ -356,6 +371,7 @@ class LogMonFrame(urwid.WidgetWrap):
     def draw(self):
         """ returns either a FocusScreen or OverviewScreen instance """
         global MODE_SWITCH
+        global FPS
         if not MODE_SWITCH:
             self.frame = self.frame.update()
             return self.frame
@@ -363,10 +379,12 @@ class LogMonFrame(urwid.WidgetWrap):
             if isinstance(self.frame, OverviewScreen):
                 self.frame = FocusScreen(self.focus_id)
                 MODE_SWITCH = False
+                FPS = 30.0
                 return self.frame
                 # self._w = self.frame
             else:
                 self.frame = OverviewScreen(self.cases, self.focus_id, self.mode_switch)
+                FPS = 1.0
                 MODE_SWITCH = False
                 return self.frame
 
@@ -381,16 +399,34 @@ class LogMonFrame(urwid.WidgetWrap):
 
         self.frame = self.draw() # bodyTxt.update()
         self._w = self.frame
-        self.animate_alarm = self.loop.set_alarm_in(1.0/30.0, self.animate)
+        global FPS
+        self.animate_alarm = self.loop.set_alarm_in(1.0/FPS, self.animate)
 
-def cui_main():
+def cui_main(arguments):
+
+    # pr = cProfile.Profile()
+    # pr.enable()  # start profilin
 
     cases = Cases(os.getcwd())
 
+    global COLUMNS
+    COLUMNS = {c: False if arguments.get("--" + c) == "False" else True
+               for c in ["progressbar", "folder", "logfile",
+                   "time", "writeout", "remaining"]
+            }
+
+    global FILTER
+    FILTER = json.loads(arguments.get("--custom_filter"))
+
     frame = LogMonFrame(cases)
-    mainloop = urwid.MainLoop(frame, palette)
+    mainloop = urwid.MainLoop(frame, palette, handle_mouse=False)
     mainloop.screen.set_terminal_properties(colors=256)
     frame.loop = mainloop
     frame.animate()
     mainloop.run()
+
+    # pr.disable()  # end profiling
+    # sortby = 'cumulative'
+    # ps = pstats.Stats(pr).sort_stats(sortby)
+    # ps.print_stats()
 

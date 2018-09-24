@@ -3,6 +3,11 @@ from colorama import Fore, Back, Style
 # from datetime import datetime, timedelta
 import datetime
 import os
+try:
+        from walk import walk
+except ImportError:
+        from os import walk
+
 import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
@@ -15,6 +20,9 @@ import sys
 
 def timedelta(seconds):
     return datetime.timedelta(seconds=int(max(0, seconds)))
+
+
+default_elements = ["progressbar", "folder", "logfile", "time", "writeout", "remaining"]
 
 class ColoredProgressBar():
 
@@ -68,15 +76,16 @@ class Cases():
         os.system("clear")
         self.mdates = {}
         self.cases = defaultdict(list)
-        p = ThreadPoolExecutor(1)
+        self.p = ThreadPoolExecutor(1)
         self.running = True
-        p.submit(self.find_cases)
+        self.future = self.p.submit(self.find_cases)
 
     def get_valid_cases(self):
         case_stats = {}
         cases = deepcopy(self.cases)
         for r, cs in cases.items():
             for c in cs:
+                c.refresh()
                 if (c.log.active):
                     c.log.refresh()
             case_stats[r] = {"active": [c.print_status_short() for c in cs
@@ -88,15 +97,15 @@ class Cases():
         return lengths, case_stats
 
     def get_max_lengths(self, statuses):
-        lengths = [0 for _ in range(6)]
+        lengths = {element: 0 for element in default_elements}
         for n, folder in statuses.items():
             for s in folder.get("active", []):
-                for i in range(len(lengths)):
-                    lengths[i] = max(lengths[i], s.lengths[i])
+                for elem in lengths.keys():
+                    lengths[elem] = max(lengths[elem], s.lengths[elem])
 
             for s in folder.get("inactive", []):
-                for i in range(len(lengths)):
-                    lengths[i] = max(lengths[i], s.lengths[i])
+                for elem in lengths.keys():
+                    lengths[elem] = max(lengths[elem], s.lengths[elem])
         return lengths
 
     def find_cases(self):
@@ -122,12 +131,15 @@ class Cases():
             # rescan only if not scanned before or folder has changed
             if root_mdate and os.path.getmtime(top) <= root_mdate:
                 # wait 10 seconds
-                time.sleep(10)
+                for i in range(10):
+                    if not self.running:
+                        return
+                    time.sleep(10)
                 continue
 
             root_mdate = os.path.getmtime(top)
 
-            for r, dirs, _ in os.walk(self.path):
+            for r, dirs, _ in walk(self.path):
 
                 ignore = [
                     "boundaryData",
@@ -145,7 +157,7 @@ class Cases():
                             dirs.remove(d)
                     full_path =  os.path.join(r, d)
                     last_mdate = self.mdates.get(full_path)
-                    if last_mdate and last_mdate >= os.path.getmtime(full_path):
+                    if last_mdate and os.path.getmtime(full_path) <= last_mdate:
                         dirs.remove(d)
 
                 for d in dirs:
@@ -164,26 +176,31 @@ class Cases():
                     except Exception as e:
                         print("innner", e, r, d)
                         pass
-                time.sleep(30)
 
-    def print_header(self, lengths):
-        width_progress = lengths[0]
-        width_folder =  lengths[1] + 2
-        width_log =  lengths[2] + 2
-        width_time =  lengths[3] + 2
-        width_next_write =  max(12, lengths[4] + 2)
-        width_finishes =  lengths[5] + 2
-        s = "  {: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
-        s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
-        s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
-                width_progress=width_progress,
-                width_folder=width_folder,
-                width_log=width_log,
-                width_time=width_time,
-                width_next_write=width_next_write,
-                width_finishes=width_finishes,
-                )
-        print(s)
+            for i in range(10):
+                if not self.running:
+                    return
+                time.sleep(1)
+
+
+    # def print_header(self, lengths):
+    #     width_progress = lengths[0]
+    #     width_folder =  lengths[1] + 2
+    #     width_log =  lengths[2] + 2
+    #     width_time =  lengths[3] + 2
+    #     width_next_write =  max(12, lengths[4] + 2)
+    #     width_finishes =  lengths[5] + 2
+    #     s = "  {: ^{width_progress}}|{: ^{width_folder}}|{: ^{width_log}}|"
+    #     s +="{: ^{width_time}}|{: ^{width_next_write}}|{: ^{width_finishes}}"
+    #     s = s.format("Progress", "Folder", "Logfile", "Time", "Next write", "Finishes",
+    #             width_progress=width_progress,
+    #             width_folder=width_folder,
+    #             width_log=width_log,
+    #             width_time=width_time,
+    #             width_next_write=width_next_write,
+    #             width_finishes=width_finishes,
+    #             )
+    #     print(s)
 
     def print_legend(self):
         s = "\nLegend: "
@@ -204,10 +221,11 @@ class Case():
 
     def __init__(self, path, log_format="log", summary=False, log_filter=None):
         self.path = path
-        self.basename = os.path.basename(self.path)
+        self.folder = os.path.basename(self.path)
         self.log_format = log_format
         self.log_fns = self.find_logs(self.log_format)
-        self.log = Log(self.find_recent_log_fn(), self)
+        self.current_log_fn = self.find_recent_log_fn()
+        self.current_log = Log(self.current_log_fn, self)
         self.log_filter = log_filter
 
         if summary:
@@ -217,10 +235,25 @@ class Case():
                     print(ret)
 
     @property
+    def log(self):
+        return self.current_log
+
+    def refresh(self):
+        log_fns = self.find_logs(self.log_format)
+        if set(log_fns) == set(self.log_fns):
+            return
+        self.log_fns = log_fns
+        current_log_fn = self.find_recent_log_fn()
+        if self.current_log_fn == current_log_fn:
+            return self.current_log
+        else:
+            self.current_log_fn = current_log_fn
+            self.current_log = Log(current_log_fn, self)
+
+    @property
     def is_valid(self):
         # print("check if valid", self.path)
         return self.has_controlDict and self.log.is_valid
-
 
     @property
     def started_sampling(self):
@@ -236,11 +269,13 @@ class Case():
         bar.add_event(self.startSamplingPerc, Fore.YELLOW)
         return bar.draw()
 
+    def custom_filter_value(self, regex):
+        return self.log.get_latest_value(regex, self.log.cached_body)
 
     def find_logs(self, log_format):
        """ returns a list of filenames and ctimes """
        # print(self.path)
-       r, d, files = next(os.walk(self.path))
+       r, d, files = next(walk(self.path))
        # TODO use regex to find logs
        files = list(filter(lambda x: log_format in x, files))
        files = [os.path.join(r, f) for f in files]
@@ -249,12 +284,12 @@ class Case():
        return list(zip(ctimes, files))
 
     @property
-    def last_timestep(self):
+    def last_timestep_ondisk(self):
         if self.log.is_parallel:
             proc_dir = os.path.join(self.path, "processor0")
             if not os.path.exists(proc_dir):
                 return 0
-            r, ds, _ = next(os.walk(proc_dir))
+            r, ds, _ = next(walk(proc_dir))
             ds = [float(d) for d in ds if "constant" not in d]
             if ds:
                 return max(ds)
@@ -262,7 +297,7 @@ class Case():
                 return 0
         else:
             ts = []
-            r, ds, _ = next(os.walk(self.path))
+            r, ds, _ = next(walk(self.path))
             for t in ds:
                 try:
                     tsf = float(t)
@@ -320,7 +355,7 @@ class Case():
 
     @property
     def writeInterval(self):
-        if self.writeControl == "runTime":
+        if self.writeControl == "runTime" or self.writeControl == "adjustableRunTime":
             return self.get_float_controlDict("writeInterval")
         else:
             return (self.get_float_controlDict("writeInterval") *
@@ -347,7 +382,7 @@ class Case():
                     # Style.BRIGHT if self.log.active else Style.DIM,
                     50,
                     self.log.active,
-                    self.basename,
+                    self.folder,
                     os.path.basename(self.log.path),
                     self.log.sim_time,
                     timedelta(self.log.time_till_writeout()),
@@ -388,18 +423,28 @@ class Case():
 class Status():
     """ Handle status of single case for simple printing  """
 
-    def __init__(self, case, progress, digits, active, base, name, time, wo, tl):
+    def __init__(self, case, progress, digits, active, folder, logfile, time, writeout, remaining):
         self.case = case
         self.progress = progress
         self.digits = digits
         self.active = active
-        self.base = base
-        self.name = name
+        self.folder = folder
+        self.logfile = logfile
         self.time = str(time)
-        self.wo = str(wo)
-        self.tl = str(tl)
+        self.writeout = str(writeout)
+        self.remaining = str(remaining)
 
     @property
     def lengths(self):
-        return [self.digits, len(self.base), len(self.name),
-                len(self.time), len(self.wo), len(self.tl)]
+        """ returns the lengths of the returned strings """
+        return {"progressbar": self.digits,
+                "folder": len(self.folder),
+                "logfile": len(self.logfile),
+                "time": len(self.time),
+                "writeout": len(self.writeout),
+                "remaining": len(self.remaining),
+                }
+
+    def custom_filter(self, value):
+        return self.case.custom_filter_value(value)
+

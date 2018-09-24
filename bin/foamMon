@@ -9,14 +9,17 @@
     Options:
         -h --help           Show this screen
         -v --version        Print version and exit
-        -m --multi          Display cases in subfolders
-        --filter=key        Display only lines with given keyword
-        --log=file          Use specific logfile
+        --progressbar (True|False) Display the progressbar [default: True]
+        --folder (True|False)      Display the foldername  [default: True]
+        --logfile (True|False)     Display the filename of the logfile [default: True]
+        --time (True|False)        Display the the current simulation time [default: True]
+        --writeout (True|False)    Display expected writeout [default: True]
+        --remaining (True|False)   Display expected remaining simulation time [default: True]
+        --custom_filter=filter     Further overview mode filter [default: {}]
 """
 
 from docopt import docopt
 from colorama import Fore, Back, Style
-# from datetime import datetime, timedelta
 import datetime
 import glob
 import os
@@ -26,28 +29,12 @@ import sys
 # import FoamMon
 from FoamMon import cui
 
-
-def timedelta(seconds):
-    return datetime.timedelta(seconds=int(max(0, seconds)))
-
-
-def get_key_header(key):
-    """ check header for given key """
-    for line in CACHE_HEADER:
-        if key in line:
-            delim = line.find(':')
-            return line[delim+2:-1]
-
-
-def get_log_name(log="*log*"):
-    return max(glob.iglob(log), key=os.path.getctime)
-
-
 if __name__ == '__main__':
     arguments = docopt(__doc__)
     if arguments.get("--version"):
         from FoamMon.version import __version__
         print(__version__)
+        print(arguments)
         sys.exit(0)
 
-    cui.cui_main()
+    cui.cui_main(arguments)
