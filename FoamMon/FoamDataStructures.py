@@ -85,6 +85,7 @@ class Cases():
         cases = deepcopy(self.cases)
         for r, cs in cases.items():
             for c in cs:
+                c.refresh()
                 if (c.log.active):
                     c.log.refresh()
             case_stats[r] = {"active": [c.print_status_short() for c in cs
@@ -223,7 +224,8 @@ class Case():
         self.folder = os.path.basename(self.path)
         self.log_format = log_format
         self.log_fns = self.find_logs(self.log_format)
-        self.log = Log(self.find_recent_log_fn(), self)
+        self.current_log_fn = self.find_recent_log_fn()
+        self.current_log = Log(self.current_log_fn, self)
         self.log_filter = log_filter
 
         if summary:
@@ -231,6 +233,22 @@ class Case():
                 ret = self.print_status_short()
                 if ret:
                     print(ret)
+
+    @property
+    def log(self):
+        return self.current_log
+
+    def refresh(self):
+        log_fns = self.find_logs(self.log_format)
+        if set(log_fns) == set(self.log_fns):
+            return
+        self.log_fns = log_fns
+        current_log_fn = self.find_recent_log_fn()
+        if self.current_log_fn == current_log_fn:
+            return self.current_log
+        else:
+            self.current_log_fn = current_log_fn
+            self.current_log = Log(current_log_fn, self)
 
     @property
     def is_valid(self):
