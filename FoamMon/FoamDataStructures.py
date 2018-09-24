@@ -237,7 +237,6 @@ class Case():
         # print("check if valid", self.path)
         return self.has_controlDict and self.log.is_valid
 
-
     @property
     def started_sampling(self):
         return self.simTime > self.startSampling
@@ -252,6 +251,8 @@ class Case():
         bar.add_event(self.startSamplingPerc, Fore.YELLOW)
         return bar.draw()
 
+    def custom_filter_value(self, regex):
+        return self.log.get_latest_value(regex, self.log.cached_body)
 
     def find_logs(self, log_format):
        """ returns a list of filenames and ctimes """
@@ -336,7 +337,7 @@ class Case():
 
     @property
     def writeInterval(self):
-        if self.writeControl == "runTime":
+        if self.writeControl == "runTime" or self.writeControl == "adjustableRunTime":
             return self.get_float_controlDict("writeInterval")
         else:
             return (self.get_float_controlDict("writeInterval") *
@@ -425,4 +426,7 @@ class Status():
                 "writeout": len(self.writeout),
                 "remaining": len(self.remaining),
                 }
+
+    def custom_filter(self, value):
+        return self.case.custom_filter_value(value)
 
