@@ -40,14 +40,15 @@ To monitor the progress of simulations simply run 'foamMon' in a parent director
 
 Fields displayed by default can be hidden by setting the corresponding flag to "False"
 
-        --progressbar (True|False) Display the progressbar [default: True]
-        --folder (True|False)      Display the foldername  [default: True]
-        --logfile (True|False)     Display the filename of the logfile [default: True]
-        --time (True|False)        Display the the current simulation time [default: True]
-        --writeout (True|False)    Display expected writeout [default: True]
-        --remaining (True|False)   Display expected remaining simulation time [default: True]
+    --progressbar (True|False) Display the progressbar [default: True]
+    --folder (True|False)      Display the foldername  [default: True]
+    --logfile (True|False)     Display the filename of the logfile [default: True]
+    --time (True|False)        Display the the current simulation time [default: True]
+    --writeout (True|False)    Display expected writeout [default: True]
+    --remaining (True|False)   Display expected remaining simulation time [default: True]
 
-Custom fields can be added by setting the '--custom_filter' argument.
+Custom fields can be added by setting the '--custom_filter' argument in the
+form of '{"Name": "Regex"}'.
 
     --custom_filter '{"Temperature": "T gas min/max  = ([0-9,. ]*)", "deltaT": "deltaT = ([0-9.e-]*)"}'
 
