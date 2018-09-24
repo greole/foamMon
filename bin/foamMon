@@ -15,7 +15,7 @@
         --time (True|False)        Display the the current simulation time [default: True]
         --writeout (True|False)    Display expected writeout [default: True]
         --remaining (True|False)   Display expected remaining simulation time [default: True]
-        --custom_filter=filter     Further overview mode filter
+        --custom_filter=filter     Further overview mode filter [default: {}]
 """
 
 from docopt import docopt
