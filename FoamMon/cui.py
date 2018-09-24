@@ -69,10 +69,12 @@ class TableHeader():
     def __init__(self, lengths):
         self.lengths = lengths
         global COLUMNS
+        global FILTER
         self.columns = [CaseColumn(name, self.lengths.get(name, 20), None)
                 for name in default_elements
                 if COLUMNS[name]
                 ]
+        self.columns += [CaseColumn(el, 20, None) for el in FILTER.keys()]
 
     @property
     def header_text(self):
