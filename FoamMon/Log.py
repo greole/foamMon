@@ -92,18 +92,28 @@ class Log():
             self.cached_body = self.cache_body()
             self.mdate = cur_mdate
 
-    def get_ClockTime(self, chunk, last=True):
-        try:
-            return float(re.findall("ClockTime = ([0-9.]*) s", chunk)[-1])
-        except:
-            return 0.0
+    def get_values(self, regex, chunk):
+        return re.findall(regex, chunk)
 
+    def get_latest_value(self, regex, chunk):
+        return self.get_values(regex, chunk)[-1]
+
+    def get_latest_value_or_default(self, regex, chunk, default):
+        try:
+            return self.get_values(regex, chunk)[-1]
+        except IndexError:
+            return default
+
+    def get_ClockTime(self, chunk, last=True):
+        # NOTE some solver print only the ExecutionTime, thus both times are searched
+        # if Execution and Clocktime are presented both are found and ExecutionTime
+        # is discarded later
+        regex = "(?:Execution|Clock)Time = ([0-9.]*) s"
+        return float(self.get_latest_value_or_default(regex, chunk, 0.0))
 
     def get_SimTime(self, chunk):
-        try:
-            return float(re.findall("\nTime = ([0-9.e\-]*)", chunk)[-1])
-        except:
-            return 0.0
+        regex = "\nTime = ([0-9.e\-]*)"
+        return float(self.get_latest_value_or_default(regex, chunk, 0.0))
 
     def get_header_value(self, key):
         ret =  re.findall("{: <7}: ([0-9A-Za-z]*)".format(key), self.cached_header)
