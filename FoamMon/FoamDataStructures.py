@@ -146,6 +146,7 @@ class Cases():
                     "uniform",
                     "processor",
                     "constant",
+                    "TDAC",
                     "lagrangian",
                     "postProcessing",
                     "dynamicCode",
@@ -290,7 +291,12 @@ class Case():
             if not os.path.exists(proc_dir):
                 return 0
             r, ds, _ = next(walk(proc_dir))
-            ds = [float(d) for d in ds if "constant" not in d]
+            rem = [ "constant",
+                    "TDAC"]
+            for k in range(len(rem)):
+                ds.remove(rem[k])
+
+            ds = [float(d) for d in ds]
             if ds:
                 return max(ds)
             else:
