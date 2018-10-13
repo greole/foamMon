@@ -291,10 +291,10 @@ class Case():
             if not os.path.exists(proc_dir):
                 return 0
             r, ds, _ = next(walk(proc_dir))
-            rem = [ "constant",
+            rems = [ "constant",
                     "TDAC"]
-            for k in range(len(rem)):
-                ds.remove(rem[k])
+            for rem in rems:
+                ds.remove(rem)
 
             ds = [float(d) for d in ds]
             if ds:
