@@ -294,7 +294,8 @@ class Case():
             rems = [ "constant",
                     "TDAC"]
             for rem in rems:
-                ds.remove(rem)
+                if rem in ds:
+                    ds.remove(rem)
 
             ds = [float(d) for d in ds]
             if ds:
